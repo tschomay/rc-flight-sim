@@ -1,0 +1,308 @@
+<title>Transmitter Probe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column of instrument panels — capability checks, then live channels, then the report to send back. */
+:root {
+  --bg: #eef1ef;
+  --panel: #ffffff;
+  --ink: #18201c;
+  --muted: #5a6660;
+  --line: #d5dbd7;
+  --accent: #e2711d;      /* Spektrum-ish orange */
+  --ok: #1f8a4c;
+  --warn: #b7791f;
+  --bad: #c0392b;
+  --track: #e3e8e5;
+  --f-display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121614; --panel: #1b201d; --ink: #e6ebe8; --muted: #94a19a; --line: #2c3430;
+  --accent: #f08a3c; --ok: #46c27a; --warn: #e0a84a; --bad: #ec6b5e; --track: #262d29; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121614; --panel: #1b201d; --ink: #e6ebe8; --muted: #94a19a; --line: #2c3430;
+  --accent: #f08a3c; --ok: #46c27a; --warn: #e0a84a; --bad: #ec6b5e; --track: #262d29; color-scheme: dark }
+
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 16px; }
+h1 { font: 600 1.7rem/1.1 var(--f-display); letter-spacing: .02em; margin: 0; text-wrap: balance; }
+h2 { font: 600 1rem/1.2 var(--f-display); letter-spacing: .08em; text-transform: uppercase; margin: 0; color: var(--muted); }
+p { margin: 0; max-width: 65ch; }
+.lede { color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: grid; gap: 12px; min-width: 0; }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
+.check { display: grid; gap: 2px; padding: 8px 10px; border-left: 3px solid var(--line); background: var(--bg); border-radius: 3px; min-width: 0; }
+.check b { font: 500 .8rem var(--f-mono); letter-spacing: .02em; }
+.check span { font-size: .85rem; color: var(--muted); overflow-wrap: anywhere; }
+.check[data-s="ok"] { border-left-color: var(--ok); } .check[data-s="ok"] b { color: var(--ok); }
+.check[data-s="warn"] { border-left-color: var(--warn); } .check[data-s="warn"] b { color: var(--warn); }
+.check[data-s="bad"] { border-left-color: var(--bad); } .check[data-s="bad"] b { color: var(--bad); }
+.pad-id { font: 500 .85rem var(--f-mono); overflow-wrap: anywhere; }
+.meta { font: .8rem var(--f-mono); color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+.axes { display: grid; gap: 6px; }
+.axis { display: grid; grid-template-columns: 3.2em 1fr 4.2em 7.5em; gap: 8px; align-items: center; font: .8rem var(--f-mono); font-variant-numeric: tabular-nums; }
+.axis.hot .lbl { color: var(--accent); }
+.bar { position: relative; height: 14px; background: var(--track); border-radius: 2px; overflow: hidden; }
+.bar .range { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.bar .mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: .5; }
+.bar .needle { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--accent); }
+.mm { color: var(--muted); text-align: right; }
+.sticks { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+.stick { display: grid; gap: 6px; justify-items: center; }
+.gimbal { width: 140px; height: 140px; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; position: relative; }
+.gimbal::before, .gimbal::after { content: ""; position: absolute; background: var(--line); }
+.gimbal::before { left: 50%; top: 8px; bottom: 8px; width: 1px; } .gimbal::after { top: 50%; left: 8px; right: 8px; height: 1px; }
+.dot { position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--accent); left: 50%; top: 50%; z-index: 1; }
+.selrow { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font: .75rem var(--f-mono); color: var(--muted); }
+select, button { font: .85rem var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; }
+button { padding: 8px 14px; cursor: pointer; font-weight: 500; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.empty { color: var(--muted); font-size: .9rem; }
+ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; max-width: 65ch; }
+pre { margin: 0; font: .75rem/1.45 var(--f-mono); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 10px; overflow-x: auto; max-height: 260px; }
+.note { font-size: .8rem; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header style="display:grid;gap:6px">
+    <h1>Transmitter Probe</h1>
+    <p class="lede">Feasibility check for the RC heli sim: can this phone's browser read a DX6i through the wireless USB dongle, and can it do Cardboard VR?</p>
+  </header>
+
+  <section class="panel">
+    <h2>Before you start</h2>
+    <ol>
+      <li>Bind the DX6i to the dongle (hold the dongle's bind button while plugging it in, then bind the radio as usual).</li>
+      <li>Plug the dongle into the phone with the USB-C OTG adapter. Open this page in Chrome.</li>
+      <li>Wiggle every stick and flip every switch. Browsers hide controllers until one moves.</li>
+      <li>Move each stick to all four corners so the ranges fill in, then tap <b>Copy report</b> and paste it back to Claude.</li>
+    </ol>
+  </section>
+
+  <section class="panel">
+    <h2>This device</h2>
+    <div class="checks" id="checks"></div>
+    <p class="note" id="frameNote" hidden>This page is running inside an embedded viewer, which can block motion sensors and WebXR. A red result for those two may be the viewer, not the phone. Open the file from the repo directly in Chrome to be sure.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Controllers</h2>
+    <div id="pads"><p class="empty">No controller seen yet. Plug in the dongle, then move a stick.</p></div>
+  </section>
+
+  <section class="panel" id="stickPanel" hidden>
+    <h2>Sticks (mode 2 layout)</h2>
+    <div class="sticks">
+      <div class="stick">
+        <div class="gimbal"><div class="dot" id="dotL"></div></div>
+        <div class="selrow">rudder <select id="selLx" aria-label="Left stick horizontal axis"></select> collective <select id="selLy" aria-label="Left stick vertical axis"></select></div>
+      </div>
+      <div class="stick">
+        <div class="gimbal"><div class="dot" id="dotR"></div></div>
+        <div class="selrow">aileron <select id="selRx" aria-label="Right stick horizontal axis"></select> elevator <select id="selRy" aria-label="Right stick vertical axis"></select></div>
+      </div>
+    </div>
+    <p class="note">Pick the axis for each function; the dot should follow the real stick. Up on the stick should move the dot up (flip it in the radio's reverse menu if not, or note it in the report).</p>
+  </section>
+
+  <section class="panel">
+    <h2>Report</h2>
+    <div class="btns">
+      <button class="primary" id="copyBtn" type="button">Copy report</button>
+      <button id="resetBtn" type="button">Reset ranges</button>
+    </div>
+    <pre id="report" tabindex="0" aria-label="Report text"></pre>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const checks = {};
+  const inFrame = (() => { try { return window.self !== window.top; } catch { return true; } })();
+  if (inFrame) $("frameNote").hidden = false;
+
+  function setCheck(key, state, label, detail) {
+    checks[key] = { state, label, detail };
+    let el = document.querySelector(`[data-k="${key}"]`);
+    if (!el) { el = document.createElement("div"); el.className = "check"; el.dataset.k = key; $("checks").append(el); }
+    el.dataset.s = state;
+    el.innerHTML = "";
+    const b = document.createElement("b"); b.textContent = label;
+    const s = document.createElement("span"); s.textContent = detail;
+    el.append(b, s);
+    renderReport();
+  }
+
+  function policyAllows(f) {
+    const p = document.permissionsPolicy || document.featurePolicy;
+    try { return p && p.allowsFeature ? p.allowsFeature(f) : null; } catch { return null; }
+  }
+
+  // --- static capability checks ---
+  const gpPolicy = policyAllows("gamepad");
+  if (!("getGamepads" in navigator)) setCheck("gamepad", "bad", "Gamepad API: missing", "This browser can't read controllers from a web page.");
+  else if (gpPolicy === false) setCheck("gamepad", "bad", "Gamepad API: blocked here", "Blocked by this page's frame. Open the page directly in Chrome.");
+  else setCheck("gamepad", "warn", "Gamepad API: waiting", "Present. Move a stick to confirm the dongle shows up.");
+
+  (async () => {
+    if (!navigator.xr) { setCheck("xr", "warn", "WebXR VR: none", "No WebXR. Plan B: our own side-by-side stereo with head tracking."); return; }
+    try {
+      const vr = await navigator.xr.isSessionSupported("immersive-vr");
+      setCheck("xr", vr ? "ok" : "warn", vr ? "WebXR VR: supported" : "WebXR VR: not offered",
+        vr ? "Chrome offers an immersive VR session (Cardboard path)." : "WebXR exists but no VR session. Plan B: our own stereo renderer.");
+    } catch (e) { setCheck("xr", "warn", "WebXR VR: blocked", String(e.message || e)); }
+  })();
+
+  (() => {
+    const c = document.createElement("canvas");
+    const gl = c.getContext("webgl2");
+    if (!gl) { setCheck("gl", "bad", "WebGL2: missing", "3D rendering would fall back to WebGL1."); return; }
+    const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+    const r = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    setCheck("gl", "ok", "WebGL2: yes", r);
+  })();
+
+  // motion sensors: do we get deviceorientation events at all?
+  (() => {
+    let got = false;
+    const on = (e) => { if (e.alpha != null || e.beta != null) { got = true; setCheck("motion", "ok", "Head tracking sensors: live", `orientation events arriving (β ${e.beta.toFixed(0)}°)`); window.removeEventListener("deviceorientation", on); } };
+    window.addEventListener("deviceorientation", on);
+    setCheck("motion", "warn", "Head tracking sensors: waiting", "Tilt the phone.");
+    setTimeout(() => { if (!got) setCheck("motion", "bad", "Head tracking sensors: none", inFrame ? "No events; likely blocked by the embedded viewer." : "No orientation events from this device."); }, 4000);
+  })();
+
+  // display refresh rate
+  (() => {
+    let n = 0, t0 = 0;
+    const step = (t) => { if (!t0) t0 = t; n++; if (t - t0 < 1000) requestAnimationFrame(step);
+      else { const hz = Math.round(n * 1000 / (t - t0)); setCheck("hz", hz >= 55 ? "ok" : "warn", `Display: ~${hz} fps`, `${screen.width}×${screen.height} @ ${devicePixelRatio}x`); } };
+    requestAnimationFrame(step);
+  })();
+
+  // --- live gamepads ---
+  const stats = {}; // index -> {min[], max[], lastTs, tsChanges, lastAxes, changes, since}
+  const nf = (v) => (v >= 0 ? "+" : "") + v.toFixed(3);
+
+  function statsFor(gp) {
+    let s = stats[gp.index];
+    if (!s || s.id !== gp.id) {
+      s = stats[gp.index] = { id: gp.id, min: gp.axes.map(() => Infinity), max: gp.axes.map(() => -Infinity),
+        lastTs: gp.timestamp, tsChanges: 0, lastAxes: gp.axes.slice(), changes: 0, since: performance.now(), hz: null, pressed: new Set() };
+    }
+    return s;
+  }
+
+  function buildPad(gp) {
+    const box = document.createElement("div");
+    box.className = "panel"; box.dataset.pad = gp.index; box.style.padding = "10px";
+    box.innerHTML = `<div class="pad-id"></div><div class="meta"></div><div class="axes"></div><div class="meta buttons"></div>`;
+    box.querySelector(".pad-id").textContent = gp.id;
+    const axes = box.querySelector(".axes");
+    gp.axes.forEach((_, i) => {
+      const row = document.createElement("div"); row.className = "axis";
+      row.innerHTML = `<span class="lbl">ax ${i}</span><div class="bar"><div class="range"></div><div class="mid"></div><div class="needle"></div></div><span class="val"></span><span class="mm"></span>`;
+      axes.append(row);
+    });
+    return box;
+  }
+
+  function fillSelect(sel, n, def) {
+    const prev = sel.value;
+    if (sel.options.length === n) return;
+    sel.innerHTML = "";
+    for (let i = 0; i < n; i++) { const o = document.createElement("option"); o.value = i; o.textContent = "ax " + i; sel.append(o); }
+    sel.value = prev !== "" && +prev < n ? prev : Math.min(def, n - 1);
+  }
+
+  let primary = null;
+  function frame() {
+    const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+    const host = $("pads");
+    if (pads.length && host.querySelector(".empty")) host.innerHTML = "";
+    if (pads.length && checks.gamepad?.state !== "ok") setCheck("gamepad", "ok", "Gamepad API: controller found", `${pads.length} device(s); see below.`);
+
+    for (const gp of pads) {
+      const s = statsFor(gp);
+      let box = host.querySelector(`[data-pad="${gp.index}"]`);
+      if (!box || box.querySelector(".pad-id").textContent !== gp.id) { box?.remove(); box = buildPad(gp); host.append(box); }
+      const now = performance.now();
+      if (gp.timestamp !== s.lastTs) { s.tsChanges++; s.lastTs = gp.timestamp; }
+      let moved = false;
+      gp.axes.forEach((v, i) => {
+        if (v < s.min[i]) s.min[i] = v; if (v > s.max[i]) s.max[i] = v;
+        if (v !== s.lastAxes[i]) moved = true;
+        const row = box.querySelectorAll(".axis")[i]; if (!row) return;
+        row.classList.toggle("hot", Math.abs(v - s.lastAxes[i]) > 0.002);
+        row.querySelector(".needle").style.left = ((v + 1) / 2 * 100) + "%";
+        const lo = Math.max(-1, s.min[i]), hi = Math.min(1, s.max[i]);
+        const rng = row.querySelector(".range");
+        rng.style.left = ((lo + 1) / 2 * 100) + "%"; rng.style.width = Math.max(0, (hi - lo) / 2 * 100) + "%";
+        row.querySelector(".val").textContent = nf(v);
+        row.querySelector(".mm").textContent = isFinite(lo) ? `${lo.toFixed(2)}…${hi.toFixed(2)}` : "";
+      });
+      if (moved) s.changes++;
+      s.lastAxes = gp.axes.slice();
+      if (now - s.since > 2000) { s.hz = Math.round(s.changes * 1000 / (now - s.since)); s.since = now; s.changes = 0; }
+      gp.buttons.forEach((b, i) => { if (b.pressed) s.pressed.add(i); });
+      box.querySelector(".meta").textContent = `mapping: ${gp.mapping || "(none)"} · axes: ${gp.axes.length} · buttons: ${gp.buttons.length} · axis updates: ${s.hz == null ? "…" : s.hz + "/s while moving"}`;
+      const down = gp.buttons.map((b, i) => (b.pressed ? i : null)).filter((i) => i != null);
+      box.querySelector(".buttons").textContent = `buttons down: ${down.length ? down.join(", ") : "none"} · ever pressed: ${[...s.pressed].join(", ") || "none"}`;
+    }
+    host.querySelectorAll("[data-pad]").forEach((el) => { if (!pads.some((p) => String(p.index) === el.dataset.pad)) el.remove(); });
+
+    primary = pads.find((p) => p.axes.length >= 4) || pads[0] || null;
+    $("stickPanel").hidden = !primary;
+    if (primary) {
+      const n = primary.axes.length;
+      fillSelect($("selLx"), n, 3); fillSelect($("selLy"), n, 2); fillSelect($("selRx"), n, 0); fillSelect($("selRy"), n, 1);
+      const a = (sel) => primary.axes[+$(sel).value] || 0;
+      const place = (dot, x, y) => { dot.style.left = (50 + x * 44) + "%"; dot.style.top = (50 - y * 44) + "%"; };
+      place($("dotL"), a("selLx"), a("selLy"));
+      place($("dotR"), a("selRx"), a("selRy"));
+    }
+    if ((frame.n = (frame.n || 0) + 1) % 15 === 0) renderReport();
+    requestAnimationFrame(frame);
+  }
+
+  function reportObj() {
+    const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+    return {
+      probe: "rc-heli-sim input probe v1",
+      when: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      embedded: inFrame,
+      checks: Object.fromEntries(Object.entries(checks).map(([k, v]) => [k, `${v.state}: ${v.label} — ${v.detail}`])),
+      controllers: pads.map((gp) => {
+        const s = stats[gp.index] || {};
+        return { id: gp.id, mapping: gp.mapping, axes: gp.axes.length, buttons: gp.buttons.length,
+          axisUpdatesPerSec: s.hz ?? null,
+          ranges: gp.axes.map((_, i) => isFinite(s.min?.[i]) ? [+s.min[i].toFixed(3), +s.max[i].toFixed(3)] : null),
+          buttonsEverPressed: s.pressed ? [...s.pressed] : [] };
+      }),
+      stickPicks: primary ? { rudder: +$("selLx").value, collective: +$("selLy").value, aileron: +$("selRx").value, elevator: +$("selRy").value } : null,
+    };
+  }
+  function renderReport() { $("report").textContent = JSON.stringify(reportObj(), null, 2); }
+
+  $("copyBtn").addEventListener("click", () => {
+    const text = $("report").textContent;
+    const done = () => { $("copyBtn").textContent = "Copied"; setTimeout(() => ($("copyBtn").textContent = "Copy report"), 1500); };
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents($("report")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); $("copyBtn").textContent = "Selected — copy it"; };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
+  });
+  $("resetBtn").addEventListener("click", () => { for (const k in stats) delete stats[k]; });
+  window.addEventListener("gamepadconnected", renderReport);
+  window.addEventListener("gamepaddisconnected", renderReport);
+  requestAnimationFrame(frame);
+})();
+</script>
