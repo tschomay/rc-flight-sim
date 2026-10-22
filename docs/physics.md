@@ -37,8 +37,8 @@ The model runs at a fixed **1 kHz** step. Axes: world y up, pilot at the origin 
 
 | Check | 450 FBL | mCP X class |
 |---|---|---|
-| Hover blade pitch at idle-up headspeed | 3.7° | 4.3° |
-| Hover power | ~90 W | ~8 W |
+| Hover blade pitch at idle-up headspeed | 3.7° | 4.2° |
+| Hover power (shaft) | ~90 W | ~6 W |
 | Inverted hover stick mirrors upright | ✓ | ✓ |
 | Full cyclic reaches set rate (360 / 400°/s) | ✓ | ✓ |
 | Full rudder reaches set rate, stops within 0.3 s | ✓ | ✓ (slower stop in the one-way tail direction) |

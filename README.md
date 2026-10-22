@@ -36,3 +36,11 @@ Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, 
 ## Spikes
 
 - [`spikes/input-probe/`](spikes/input-probe/index.html): one-page browser check for the dongle, WebXR, sensors and GPU.
+
+## Next steps (handoff)
+
+1. Host `app/dist/` over HTTPS (e.g. Vercel or GitHub Pages) and open it in Chrome on the Galaxy S24.
+2. Plug in the WS2000, run Settings → Transmitter → Set up transmitter, and fly the 450 in the "Rotating hover" preset.
+3. Tune feel against the real heli in `app/src/sim/models.js` (see docs/physics.md "Model parameters"), and re-run `npm test`.
+4. Try VR (Cardboard): tap once to centre the view, twice to reset. Adjust lens sliders under View & wind.
+5. Open questions: whether the trainer's assists feel like a buddy box; whether the HeliFreak guide's stages (paywalled to us) should become presets.
