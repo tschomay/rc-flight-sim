@@ -1,0 +1,18 @@
+{
+  "name": "rc-heli-sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Phone RC helicopter trainer: three.js renderer, 1 kHz flight model, transmitter and touch input, Cardboard VR.",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --serve",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}

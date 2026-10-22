@@ -1,0 +1,252 @@
+// App entry: wires the flight model, trainer, inputs, renderer and UI together.
+// The physics runs at a fixed 1 kHz inside each animation frame; input is sampled once
+// per frame (the display rate, 60–120 Hz).
+
+import * as THREE from "three";
+import { Heli } from "./sim/heli.js";
+import { MODELS } from "./sim/models.js";
+import { Trainer } from "./sim/trainer.js";
+import { Wind } from "./sim/wind.js";
+import { buildWorld } from "./render/world.js";
+import { HeliMesh } from "./render/heliMesh.js";
+import { FlatView, CardboardView, EYE } from "./render/view.js";
+import { firstGamepad, readMapped } from "./input/gamepad.js";
+import { TouchSticks } from "./input/touch.js";
+import { Keyboard } from "./input/keyboard.js";
+import { loadSettings, saveSettings } from "./ui/settings.js";
+import { UI } from "./ui/ui.js";
+
+const DT = 0.001;
+const expo = (x, p) => (1 - p) * x + p * x * x * x;
+
+class App {
+  constructor() {
+    this.settings = loadSettings();
+    const stage = document.getElementById("stage");
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    stage.append(this.renderer.domElement);
+
+    this.scene = new THREE.Scene();
+    this.world = buildWorld(this.scene);
+    this.wind = new Wind();
+    this.flat = new FlatView();
+    this.cardboard = new CardboardView();
+    this.xrRig = new THREE.Group();
+    this.xrRig.position.copy(EYE);
+    this.scene.add(this.cardboard.head);
+
+    this.touch = new TouchSticks(document.getElementById("sticks"));
+    this.keyboard = new Keyboard();
+    this.mode = this.settings.mode;
+    this.view = "flat";
+    this.paused = false;
+    this.acc = 0;
+    this.prevReset = false;
+    this.crashAt = 0;
+
+    this.ui = new UI(this);
+    this.applyModel();
+    this.applyAll();
+    this.restart();
+
+    addEventListener("resize", () => this.resize());
+    screen.orientation?.addEventListener?.("change", () => this.resize());
+    addEventListener("keydown", (e) => {
+      if (e.target.closest?.("input, select, textarea")) return;
+      if (e.code === "Digit1") this.setMode("normal");
+      if (e.code === "Digit2") this.setMode("idle");
+      if (e.code === "Digit3") this.setMode("hold");
+      if (e.code === "KeyR") this.restart();
+    });
+    let lastTap = 0;
+    this.renderer.domElement.addEventListener("pointerdown", () => {
+      if (this.view !== "cardboard") return;
+      const now = performance.now();
+      if (now - lastTap < 350) this.restart(); else this.cardboard.recenter();
+      lastTap = now;
+    });
+    document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && this.view === "cardboard") this.exitVR(); });
+    this.resize();
+    this.last = performance.now();
+    this.renderer.setAnimationLoop((t, frame) => this.frame(t, frame));
+  }
+
+  /** The model definition with the user's rate scaling applied. */
+  modelDef() {
+    const def = structuredClone(MODELS[this.settings.model]);
+    const k = this.settings.rates / 100;
+    for (const a of ["roll", "pitch", "yaw"]) def.rates[a] *= k;
+    return def;
+  }
+
+  applyModel() {
+    const def = this.modelDef();
+    if (!this.heli) this.heli = new Heli(def); else this.heli.setModel(def);
+    if (this.mesh) this.scene.remove(this.mesh.root);
+    this.mesh = new HeliMesh(def);
+    this.scene.add(this.mesh.root);
+    this.refDistance = def.rotor.radius * 17;  // auto-zoom keeps apparent size like a 450 at 6 m
+  }
+
+  applyAll() {
+    const s = this.settings;
+    if (!this.trainer) this.trainer = new Trainer(s.trainer);
+    this.trainer.cfg = structuredClone(s.trainer);
+    this.wind.set(s.wind);
+    this.cardboard.setLens(s.view.lens);
+    this.world.setTarget(s.trainer, s.trainer.kind === "hover");
+  }
+
+  saveAndApply(what) {
+    saveSettings(this.settings);
+    if (what === "model") { this.applyModel(); this.applyAll(); this.restart(); return; }
+    this.applyAll();
+    if (what === "trainer-restart") this.restart();
+  }
+
+  setMode(m) {
+    this.mode = m;
+    this.settings.mode = m;
+    saveSettings(this.settings);
+  }
+
+  restart() {
+    this.crashAt = 0;
+    this.ui.hideToast();
+    this.trainer.start(this.heli, this.mode);
+    if (this.trainer.cfg.kind === "hover") this.mode = "idle";
+    this.acc = 0;
+  }
+
+  resize() {
+    const w = innerWidth, h = innerHeight;
+    const pr = Math.min(devicePixelRatio, this.view === "cardboard" ? 1.6 : 2);
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h);
+    this.flat.resize(w, h);
+    this.cardboard.resize(w, h, pr);
+  }
+
+  readInput(dt) {
+    const s = this.settings;
+    const map = s.input.map;
+    const gp = map ? firstGamepad(map.id) : null;
+    const tx = gp ? readMapped(gp, map) : null;
+    const touchOn = this.view === "flat" && (s.input.touch === "on" || (s.input.touch === "auto" && !tx));
+    this.touch.visible = touchOn;
+    const keys = this.keyboard.read(dt);
+    let raw, source;
+    if (tx) { raw = tx; source = "transmitter"; }
+    else if (this.keyboard.used) { raw = keys; source = "keyboard"; }
+    else { raw = this.touch.read(); source = "touch"; }
+
+    let mode = this.mode;
+    const sw = tx?.switches || {};
+    const switchesMapped = !!(map && (map.switches?.idle || map.switches?.hold));
+    if (tx && switchesMapped) {
+      mode = sw.hold ? "hold" : map.switches.idle ? (sw.idle ? "idle" : "normal") : this.mode === "hold" ? "idle" : this.mode;
+      this.mode = mode;
+    }
+    if (tx && sw.reset && !this.prevReset) this.restart();
+    this.prevReset = !!sw.reset;
+    this.ui.setModeButtons(this.mode, !!(tx && switchesMapped));
+
+    const ec = s.expo.cyclic / 100, er = s.expo.rudder / 100;
+    return {
+      sticks: { roll: expo(raw.roll, ec), pitch: expo(raw.pitch, ec), yaw: expo(raw.yaw, er), coll: raw.coll, mode },
+      source,
+    };
+  }
+
+  frame(t) {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    const { sticks, source } = this.readInput(dt);
+
+    if (!this.paused) {
+      this.acc += dt;
+      let n = 0;
+      while (this.acc >= DT && n < 60) {
+        const wind = this.wind.step(DT);
+        const ctl = this.trainer.update(this.heli, sticks, DT);
+        this.heli.step(ctl, { wind }, DT);
+        this.acc -= DT; n++;
+      }
+      if (n === 60) this.acc = 0;
+    }
+
+    if (this.heli.crashed) {
+      if (!this.crashAt) {
+        this.crashAt = now;
+        this.trainer.crashes++;
+        this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : " — tap Reset"}`, 0);
+      } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart();
+    }
+
+    const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
+    this.mesh.update(this.heli, dt);
+    this.world.update(hp, this.wind.current);
+    this.world.setInside(this.trainer.inside);
+    this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
+
+    if (this.renderer.xr.isPresenting) {
+      this.renderer.render(this.scene, this.flat.camera);
+    } else if (this.view === "cardboard") {
+      this.cardboard.update(hp, dt);
+      this.cardboard.render(this.renderer, this.scene);
+    } else {
+      this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov });
+      this.flat.render(this.renderer, this.scene);
+    }
+  }
+
+  async enterVR() {
+    const s = this.settings;
+    if (s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
+      try {
+        const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local"] });
+        this.renderer.xr.enabled = true;
+        this.renderer.xr.setReferenceSpaceType("local");
+        this.scene.add(this.xrRig);
+        this.xrRig.add(this.flat.camera);
+        this.flat.camera.position.set(0, 0, 0);
+        await this.renderer.xr.setSession(session);
+        session.addEventListener("end", () => {
+          this.renderer.xr.enabled = false;
+          this.flat.camera.removeFromParent();
+          this.flat.camera.position.copy(EYE);
+          this.scene.remove(this.xrRig);
+          this.resize();
+        });
+        return;
+      } catch (e) {
+        console.warn("WebXR failed, using built-in Cardboard view", e);
+      }
+    }
+    this.view = "cardboard";
+    document.body.classList.add("vr");
+    try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch { /* fullscreen optional */ }
+    try { await screen.orientation?.lock?.("landscape"); } catch { /* lock optional */ }
+    try { this.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
+    this.cardboard.start();
+    this.resize();
+    this.ui.toast("Tap once to centre the view, twice to reset", 3000);
+  }
+
+  exitVR() {
+    this.view = "flat";
+    document.body.classList.remove("vr");
+    this.cardboard.stop();
+    try { document.fullscreenElement && document.exitFullscreen(); } catch { /* ignore */ }
+    try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
+    this.wakeLock?.release?.().catch(() => {});
+    this.resize();
+  }
+}
+
+window.app = new App();
