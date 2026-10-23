@@ -71,6 +71,8 @@ export class UI {
     this.hudLast = 0;
   }
 
+  setStereoButton(on) { document.getElementById("btn-vr").textContent = on ? "Exit 3D" : "3D"; }
+
   buildModes() {
     const m = this.el.modes;
     m.innerHTML = "";
@@ -271,7 +273,9 @@ export class UI {
     return [
       slider("Field of view", 20, 60, 1, s.view.fov, (v) => { s.view.fov = v; this.changed("view"); }, (v) => `${v}°`),
       toggle("Auto-zoom", s.view.autoZoom, (v) => { s.view.autoZoom = v; this.changed("view"); }, "narrows the view as the heli gets farther away"),
-      seg("VR", [["auto", "WebXR if available"], ["cardboard", "Built-in Cardboard"]], s.view.vrMode, (v) => { s.view.vrMode = v; this.changed("view"); }),
+      seg("3D button", [["cardboard", "Cardboard / VR"], ["plain", "Side by side, no lenses"], ["anaglyph", "Red/cyan glasses"]], s.view.stereo, (v) => { s.view.stereo = v; this.changed("view"); }),
+      h("p", { class: "hint" }, "A plain phone screen can't show 3D by itself; something has to give each eye its own picture. Cardboard does it with lenses (the image is pre-distorted to match them). Side by side drops the distortion, for a viewer without lenses or for parallel free-viewing. Red/cyan glasses (a few dollars) give 3D on the normal full screen, with the HUD and touch sticks still there."),
+      seg("VR headset", [["auto", "WebXR if available"], ["cardboard", "Built-in Cardboard"]], s.view.vrMode, (v) => { s.view.vrMode = v; this.changed("view"); }),
       toggle("Head tracking in Cardboard", s.view.headTracking, (v) => { s.view.headTracking = v; this.changed("view"); }, "off: 3D stereo that keeps the heli in view for you, no head movement needed"),
       h("details", {}, h("summary", {}, "Cardboard lens"),
         slider("Distortion k1", 0, 0.6, 0.01, lens.k1, setL("k1"), (v) => (+v).toFixed(2)),

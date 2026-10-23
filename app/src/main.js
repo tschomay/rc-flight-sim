@@ -3,6 +3,7 @@
 // per frame (the display rate, 60–120 Hz).
 
 import * as THREE from "three";
+import { AnaglyphEffect } from "three/examples/jsm/effects/AnaglyphEffect.js";
 import { Heli } from "./sim/heli.js";
 import { MODELS } from "./sim/models.js";
 import { Trainer, selfLevel } from "./sim/trainer.js";
@@ -106,7 +107,8 @@ class App {
     if (!this.trainer) this.trainer = new Trainer(s.trainer);
     this.trainer.cfg = structuredClone(s.trainer);
     this.wind.set(s.wind);
-    this.cardboard.setLens(s.view.lens);
+    // side-by-side without lenses: no pre-distortion, and a field of view close to the flat view's
+    this.cardboard.setLens(s.view.stereo === "plain" ? { ...s.view.lens, k1: 0, k2: 0, zoom: 1, fov: 55 } : s.view.lens);
     this.cardboard.headTracking = s.view.headTracking;
     this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
   }
@@ -224,6 +226,7 @@ class App {
     this.renderer.setSize(w, h);
     this.flat.resize(w, h);
     this.cardboard.resize(w, h, pr);
+    this.anaglyph?.setSize(w, h);
   }
 
   readInput(dt) {
@@ -302,7 +305,10 @@ class App {
       this.cardboard.render(this.renderer, this.scene);
     } else {
       this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov });
-      this.flat.render(this.renderer, this.scene);
+      if (this.view === "anaglyph") {
+        this.flat.camera.focus = Math.max(1, this.flat.camera.position.distanceTo(hp));  // heli sits at screen depth
+        this.anaglyph.render(this.scene, this.flat.camera);
+      } else this.flat.render(this.renderer, this.scene);
     }
   }
 
@@ -314,9 +320,18 @@ class App {
     } catch { this.ui.toast("Full screen isn't available here"); }
   }
 
+  /** Red/cyan glasses: the flat view, HUD and sticks, rendered as an anaglyph. */
+  toggleAnaglyph() {
+    this.anaglyph ||= new AnaglyphEffect(this.renderer, innerWidth, innerHeight);
+    this.view = this.view === "anaglyph" ? "flat" : "anaglyph";
+    this.ui.setStereoButton(this.view === "anaglyph");
+    this.resize();
+  }
+
   async enterVR() {
     const s = this.settings;
-    if (s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
+    if (s.view.stereo === "anaglyph" || this.view === "anaglyph") return this.toggleAnaglyph();
+    if (s.view.stereo === "cardboard" && s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
       try {
         const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local"] });
         this.renderer.xr.enabled = true;

@@ -17,7 +17,7 @@ export const DEFAULTS = {
   bladeColor: "dark",                 // "dark" | "white"                   // stick sets tilt angle and centring levels (stability mode)
   mode: "idle",                       // flight mode when no transmitter switch is mapped
   input: { touch: "auto", map: null },
-  view: { fov: 34, autoZoom: true, vrMode: "auto", headTracking: true, column: true, lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
+  view: { fov: 34, autoZoom: true, vrMode: "auto", stereo: "cardboard", headTracking: true, column: true, lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
   wind: { speed: 0, from: 0, gust: 0.3 },
   autoReset: true,
   school: DEFAULT_SCHOOL,
