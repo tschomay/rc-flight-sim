@@ -129,7 +129,9 @@ class App {
     const s = this.settings;
     const { plan } = planNext(s.school);
     s.school.override = null;  // an override is for one session
-    this.session = { plan, startedAt: Date.now(), elapsed: 0, crashes: 0, outOfArea: 0, prev: { trainer: structuredClone(s.trainer), timeScale: s.timeScale } };
+    // restarting mid-session keeps the settings from before the first one
+    const prev = this.session?.prev || { trainer: structuredClone(s.trainer), timeScale: s.timeScale };
+    this.session = { plan, startedAt: Date.now(), elapsed: 0, crashes: 0, outOfArea: 0, prev };
     s.trainer = trainerFor(plan, s.school, s.trainer);
     s.timeScale = plan.speed;
     saveSettings(s);
