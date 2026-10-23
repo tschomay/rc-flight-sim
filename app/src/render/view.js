@@ -11,7 +11,7 @@ const EYE = new THREE.Vector3(0, 1.7, 0);
 
 export class FlatView {
   constructor() {
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.03, 6000);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 6000);
     this.camera.position.copy(EYE);
     this.look = new THREE.Vector3(0, 0.5, -5);
     this.fov = 50;
@@ -54,8 +54,8 @@ export class CardboardView {
   constructor() {
     this.head = new THREE.Group();
     this.head.position.copy(EYE);
-    this.left = new THREE.PerspectiveCamera(80, 1, 0.03, 6000);
-    this.right = new THREE.PerspectiveCamera(80, 1, 0.03, 6000);
+    this.left = new THREE.PerspectiveCamera(80, 1, 0.1, 6000);
+    this.right = new THREE.PerspectiveCamera(80, 1, 0.1, 6000);
     this.head.add(this.left, this.right);
     this.ipd = 0.064;
     // linear HDR target; the distortion pass applies tone mapping and sRGB output itself

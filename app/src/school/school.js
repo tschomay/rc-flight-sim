@@ -7,11 +7,14 @@
 // "jump" entry moves to a lesson by hand (deviating from the plan, or marking a practice
 // lesson passed), and an override changes only the next session.
 
+import { patternFor, DEFAULT_PATTERN } from "../sim/exercises.js";
+
 export const CREDIT = {
   title: "From tail-in to all 8s and funnels in 6 months",
   author: "ArchmageAU",
   where: "HeliFreak, RC Helicopter Flight School forum, 2013",
-  source: "https://www.helifreak.com/showthread.php?t=493289",  // the thread the guide summarises
+  source: "https://www.helifreak.com/showthread.php?t=531380",
+  origin: "https://www.helifreak.com/showthread.php?t=493289",  // "Just confirming I am on the right track", which the guide summarises
 };
 
 export const PIRO_RATE = 6;        // °/s: one rotation per minute
@@ -82,7 +85,8 @@ export const DEFAULT_SCHOOL = {
   sessionMinutes: 15,
   restMinutes: 15,
   circle: 3,
-  log: [],         // entries, oldest first (see recordEntry)
+  log: [],         // entries, oldest first (see sessionEntry)
+  deleted: [],     // keys of deleted entries, so a deletion survives merging with a backup
   override: null,  // { lesson?, orientation?, direction?, speed?, collAssist? } for the next session only
 };
 
@@ -131,10 +135,13 @@ export function replay(log) {
     if (L === "1") st.nextDir = opposite(e.direction);
     if (L === "4") st.cycle = (st.cycle + 1) % L4_CYCLE.length;
     if (L === "5a") {
-      st.piroRun = e.crashes === 0 ? st.piroRun + 1 : 0;
+      // clean: no crashes and, when the sim counted them, the ten rotations (five each way)
+      const p = e.tally?.piros;
+      const clean = e.crashes === 0 && (!p || (p.cw >= 5 && p.ccw >= 5));
+      st.piroRun = clean ? st.piroRun + 1 : 0;
       st.piroNext = e.orientation === "inverted" ? "upright" : "inverted";
       if (st.piroRun >= 10) { st.lesson = nextLessonId(L); st.piroRun = 0; st.notes.push(`Ten clean sessions in a row: on to Lesson ${st.lesson}!`); }
-      else st.notes.push(e.crashes === 0 ? `${st.piroRun} of 10 clean sessions in a row.` : "Run reset: ten clean sessions in a row needed.");
+      else st.notes.push(clean ? `${st.piroRun} of 10 clean sessions in a row.` : "Run reset: ten clean sessions in a row needed (no crashes, 5 rotations each way).");
     }
   }
   return st;
@@ -165,7 +172,8 @@ export function planNext(school) {
 
 /** Trainer settings for a planned session. */
 export function trainerFor(plan, school, base) {
-  if (plan.kind !== "hover") return { ...base, kind: "free", leaveIsCrash: false };
+  const pattern = { ...DEFAULT_PATTERN, ...(base.pattern || {}), ...patternFor(plan.lesson) };
+  if (plan.kind !== "hover") return { ...base, kind: "free", leaveIsCrash: false, pattern, compass: false };
   return {
     ...base,
     kind: "hover",
@@ -178,6 +186,8 @@ export function trainerFor(plan, school, base) {
     rotationSpeed: PIRO_RATE,
     heightWindow: 0,
     leaveIsCrash: true,
+    pattern,
+    compass: plan.lesson === "5a",
   };
 }
 
@@ -219,7 +229,8 @@ export function dailyStatus(school, now = new Date()) {
 }
 
 export function toCSV(log) {
-  const cols = ["type", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "collAssist", "rudderAssist", "notes"];
+  const cols = ["type", "id", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "collAssist", "rudderAssist", "notes", "tally"];
   const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
-  return [cols.join(","), ...log.map((e) => cols.map((c) => q(e[c])).join(","))].join("\n");
+  const val = (e, c) => (c === "tally" && e.tally ? JSON.stringify(e.tally) : e[c]);
+  return [cols.join(","), ...log.map((e) => cols.map((c) => q(val(e, c))).join(","))].join("\n");
 }

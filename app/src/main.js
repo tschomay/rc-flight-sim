@@ -3,6 +3,7 @@
 // per frame (the display rate, 60–120 Hz).
 
 import * as THREE from "three";
+import { AnaglyphEffect } from "three/examples/jsm/effects/AnaglyphEffect.js";
 import { Heli } from "./sim/heli.js";
 import { MODELS } from "./sim/models.js";
 import { Trainer, selfLevel } from "./sim/trainer.js";
@@ -16,6 +17,8 @@ import { Keyboard } from "./input/keyboard.js";
 import { loadSettings, saveSettings } from "./ui/settings.js";
 import { UI } from "./ui/ui.js";
 import { planNext, trainerFor, sessionEntry } from "./school/school.js";
+import { mergeLogs, cloudLoad, cloudSave, looksLikeToken } from "./school/backup.js";
+import { DEFAULTS } from "./ui/settings.js";
 
 const DT = 0.001;
 const expo = (x, p) => (1 - p) * x + p * x * x * x;
@@ -76,11 +79,15 @@ class App {
     this.resize();
     this.last = performance.now();
     this.renderer.setAnimationLoop((t, frame) => this.frame(t, frame));
+    if (this.settings.backup.auto) this.cloudSync();
   }
 
   /** The model definition with the user's rate scaling applied. */
   modelDef() {
-    const def = structuredClone(MODELS[this.settings.model]);
+    const s = this.settings;
+    const def = structuredClone(MODELS[s.model]);
+    if (s.bladeColor === "white") def.look.blade = 0xf4f4f0;
+    if (s.idlePitch) def.pitch.idle = def.pitch.hold = [-s.idlePitch, s.idlePitch];
     const k = this.settings.rates / 100;
     for (const a of ["roll", "pitch", "yaw"]) def.rates[a] *= k;
     return def;
@@ -100,16 +107,65 @@ class App {
     if (!this.trainer) this.trainer = new Trainer(s.trainer);
     this.trainer.cfg = structuredClone(s.trainer);
     this.wind.set(s.wind);
-    this.cardboard.setLens(s.view.lens);
+    // side-by-side without lenses: no pre-distortion, and a field of view close to the flat view's
+    this.cardboard.setLens(s.view.stereo === "plain" ? { ...s.view.lens, k1: 0, k2: 0, zoom: 1, fov: 55 } : s.view.lens);
     this.cardboard.headTracking = s.view.headTracking;
-    this.world.setTarget(s.trainer, s.trainer.kind === "hover");
+    this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
+    this.world.setPattern(s.trainer.pattern);
+    this.world.setCompass(s.trainer, s.trainer.kind === "hover" && s.trainer.compass);
   }
 
   saveAndApply(what) {
     saveSettings(this.settings);
+    if (what === "school") this.scheduleBackup();
     if (what === "model") { this.applyModel(); this.applyAll(); this.restart(); return; }
     this.applyAll();
     if (what === "trainer-restart") this.restart();
+  }
+
+  // ---------- backup ----------
+  scheduleBackup() {
+    const b = this.settings.backup;
+    if (!b.auto || !looksLikeToken(b.token)) return;
+    clearTimeout(this.backupT);
+    this.backupT = setTimeout(() => this.cloudSync(), 4000);
+  }
+
+  /** Merge the cloud log into ours, save locally, then write the merged copy back. */
+  async cloudSync({ manual = false, restoreSettings = false } = {}) {
+    const s = this.settings, b = s.backup;
+    if (!looksLikeToken(b.token) || this.syncing) return;
+    this.syncing = true;
+    try {
+      const remote = await cloudLoad(b.token);
+      if (remote?.settings?.school) {
+        const before = JSON.stringify(s.school.log);
+        Object.assign(s.school, mergeLogs(s.school, remote.settings.school));
+        if (restoreSettings) this.restoreSettings(remote.settings);
+        if (JSON.stringify(s.school.log) !== before || restoreSettings) { saveSettings(s); this.applyAll(); }
+      } else if (restoreSettings) this.ui.toast("No cloud backup yet", 2000);
+      await cloudSave(b.token, s);
+      b.lastAt = new Date().toISOString();
+      b.lastError = null;
+      if (manual) this.ui.toast("Backed up", 1400);
+    } catch (e) {
+      b.lastError = e.message || "failed";
+      if (manual) this.ui.toast(`Backup failed: ${b.lastError}`, 3500);
+    } finally {
+      this.syncing = false;
+      saveSettings(s);
+    }
+  }
+
+  /** Take settings from a backup, keeping this device's cloud token and the merged log. */
+  restoreSettings(from) {
+    const s = this.settings;
+    const keep = { backup: s.backup, school: s.school };
+    for (const k of Object.keys(DEFAULTS)) if (k in from) s[k] = structuredClone(from[k]);
+    Object.assign(s, keep);
+    s.school = { ...from.school, log: keep.school.log, deleted: keep.school.deleted };
+    saveSettings(s);
+    this.applyModel(); this.applyAll(); this.restart();
   }
 
   setMode(m) {
@@ -150,6 +206,8 @@ class App {
     // log what was actually flown, in case settings were changed mid-session
     entry.speed = s.timeScale;
     if (ss.plan.kind === "hover") { entry.collAssist = s.trainer.assist.collective; entry.rudderAssist = s.trainer.assist.rudder; }
+    const ex = this.trainer.exercise;
+    if (s.trainer.pattern?.kind !== "none" || s.trainer.compass) { entry.tally = ex.tally(); entry.notes = ex.summary(); }
     s.trainer = ss.prev.trainer;
     s.timeScale = ss.prev.timeScale;
     saveSettings(s);
@@ -172,6 +230,7 @@ class App {
     this.renderer.setSize(w, h);
     this.flat.resize(w, h);
     this.cardboard.resize(w, h, pr);
+    this.anaglyph?.setSize(w, h);
   }
 
   readInput(dt) {
@@ -240,7 +299,8 @@ class App {
     const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
     this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
     this.world.update(hp, this.wind.current);
-    this.world.setInside(this.trainer.inside);
+    this.world.setZone(this.trainer.zone);
+    if (this.trainer.cfg.compass) this.world.highlightCompass(this.trainer.exercise.nextPoint);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {
@@ -250,13 +310,33 @@ class App {
       this.cardboard.render(this.renderer, this.scene);
     } else {
       this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov });
-      this.flat.render(this.renderer, this.scene);
+      if (this.view === "anaglyph") {
+        this.flat.camera.focus = Math.max(1, this.flat.camera.position.distanceTo(hp));  // heli sits at screen depth
+        this.anaglyph.render(this.scene, this.flat.camera);
+      } else this.flat.render(this.renderer, this.scene);
     }
+  }
+
+  async toggleFullscreen() {
+    const root = document.documentElement;
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else await (root.requestFullscreen || root.webkitRequestFullscreen).call(root, { navigationUI: "hide" });
+    } catch { this.ui.toast("Full screen isn't available here"); }
+  }
+
+  /** Red/cyan glasses: the flat view, HUD and sticks, rendered as an anaglyph. */
+  toggleAnaglyph() {
+    this.anaglyph ||= new AnaglyphEffect(this.renderer, innerWidth, innerHeight);
+    this.view = this.view === "anaglyph" ? "flat" : "anaglyph";
+    this.ui.setStereoButton(this.view === "anaglyph");
+    this.resize();
   }
 
   async enterVR() {
     const s = this.settings;
-    if (s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
+    if (s.view.stereo === "anaglyph" || this.view === "anaglyph") return this.toggleAnaglyph();
+    if (s.view.stereo === "cardboard" && s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
       try {
         const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local"] });
         this.renderer.xr.enabled = true;

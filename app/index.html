@@ -43,8 +43,8 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .chip.inv { border-color: var(--warn); color: var(--warn); }
 .chip.slow { border-color: #6fb6ff; color: #6fb6ff; }
 .score { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px; padding: 4px 10px; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; width: fit-content; }
-.score.in { border-left-color: var(--ok); }
-.score b { color: var(--warn); } .score.in b { color: var(--ok); }
+.score.in { border-left-color: var(--ok); } .score.out { border-left-color: var(--bad); }
+.score b { color: var(--warn); } .score.in b { color: var(--ok); } .score.out b { color: var(--bad); }
 
 #top { position: fixed; top: var(--pad-t); right: var(--pad-r); display: flex; gap: 6px; }
 #top button { padding: 8px 12px; }
@@ -143,7 +143,8 @@ select, input[type="number"], input[type="datetime-local"], textarea { font: inh
 <div id="hud" aria-live="polite"></div>
 <div id="top">
   <button id="btn-reset" type="button">Reset</button>
-  <button id="btn-vr" type="button">VR</button>
+  <button id="btn-full" type="button" aria-label="Full screen">Full screen</button>
+  <button id="btn-vr" type="button">3D</button>
   <button id="btn-menu" type="button">Settings</button>
 </div>
 <div id="modes" role="group" aria-label="Flight mode"></div>

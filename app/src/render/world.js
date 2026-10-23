@@ -3,6 +3,7 @@
 // Everything is procedural so the app works offline and stays small.
 
 import * as THREE from "three";
+import { COMPASS, DEFAULT_PATTERN } from "../sim/exercises.js";
 
 function canvasTexture(size, draw, { repeat = 1, srgb = true } = {}) {
   const c = document.createElement("canvas");
@@ -99,6 +100,14 @@ function skyDome(sunDir) {
   return m;
 }
 
+/** Draw a flat mesh on the ground without z-fighting it: pulled toward the camera in depth. */
+function decal(mat, order = 1) {
+  mat.polygonOffset = true;
+  mat.polygonOffsetFactor = -order * 2;
+  mat.polygonOffsetUnits = -order * 4;
+  return mat;
+}
+
 export function buildWorld(scene) {
   const sunDir = new THREE.Vector3(-0.45, 0.8, 0.55).normalize();  // behind-left of the pilot: shadow falls ahead
   scene.background = new THREE.Color(0xc9dbe8);
@@ -131,7 +140,10 @@ export function buildWorld(scene) {
       .replace("#include <common>", "#include <common>\nvarying vec3 vWorld; uniform sampler2D macro;")
       .replace("#include <map_fragment>", `#include <map_fragment>
         float field = step(abs(vWorld.x), 60.0) * step(abs(vWorld.z + 30.0), 60.0);
-        float stripe = mix(1.0, step(0.5, fract(vWorld.x / 5.0)) * 0.16 + 0.9, field);
+        // anti-aliased stripe edges: a hard step() shimmers as the camera moves
+        float sx = vWorld.x / 5.0, sw = max(fwidth(sx), 1e-4);
+        float sq = clamp((abs(fract(sx) - 0.5) - 0.25) / sw + 0.5, 0.0, 1.0);
+        float stripe = mix(1.0, mix(0.9, 1.06, mix(sq, 0.5, clamp(sw * 3.0, 0.0, 1.0))), field);
         float m1 = texture2D(macro, vWorld.xz / 90.0).r;
         float m2 = texture2D(macro, vWorld.xz / 13.0).r;
         diffuseColor.rgb *= stripe * (0.78 + 0.32 * m1) * (0.9 + 0.2 * m2) * mix(0.82, 1.0, field);`);
@@ -144,17 +156,17 @@ export function buildWorld(scene) {
   // flight line (gravel strip the pilot stands on) and a small landing pad
   const gravel = gravelTexture();
   gravel.repeat.set(20, 2);
-  const line = new THREE.Mesh(new THREE.PlaneGeometry(40, 3), new THREE.MeshStandardMaterial({ map: gravel, roughness: 1 }));
-  line.rotation.x = -Math.PI / 2; line.position.set(0, 0.004, 0.6); line.receiveShadow = true;
+  const line = new THREE.Mesh(new THREE.PlaneGeometry(40, 3), decal(new THREE.MeshStandardMaterial({ map: gravel, roughness: 1 }), 1));
+  line.rotation.x = -Math.PI / 2; line.position.set(0, 0.01, 0.6); line.receiveShadow = true;
   scene.add(line);
   const padTex = canvasTexture(256, (g, n) => {
     g.fillStyle = "#3c4148"; g.fillRect(0, 0, n, n);
     g.strokeStyle = "#e9e6dc"; g.lineWidth = 10; g.strokeRect(14, 14, n - 28, n - 28);
     g.fillStyle = "#e9e6dc"; g.font = "bold 150px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("H", n / 2, n / 2 + 8);
   });
-  const pad = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), new THREE.MeshStandardMaterial({ map: padTex, roughness: 0.9 }));
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.2), decal(new THREE.MeshStandardMaterial({ map: padTex, roughness: 0.9 }), 1));
   pad.rotation.x = -Math.PI / 2; pad.rotation.z = Math.PI / 2; pad.receiveShadow = true;
-  pad.position.set(0, 0.005, -5);
+  pad.position.set(0, 0.01, -5);
   scene.add(pad);
 
   // traffic cones along the flight line every 5 m for scale
@@ -225,9 +237,9 @@ export function buildWorld(scene) {
 
   // trainer target: ground circle and a ring at hover height
   const targetGroup = new THREE.Group();
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9, depthWrite: false });
+  const ringMat = decal(new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9, depthWrite: false }), 2);
   const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.96, 1, 64), ringMat);
-  groundRing.rotation.x = -Math.PI / 2; groundRing.position.y = 0.012;
+  groundRing.rotation.x = -Math.PI / 2; groundRing.position.y = 0.02;
   const airMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.3, depthWrite: false });
   const airRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.008, 6, 64), airMat);
   airRing.rotation.x = Math.PI / 2;
@@ -237,10 +249,56 @@ export function buildWorld(scene) {
   targetGroup.add(groundRing, airRing, column);
   scene.add(targetGroup);
 
+  // pattern outlines (circle / figure-8) and the hover circle's compass points
+  const patternGroup = new THREE.Group();
+  scene.add(patternGroup);
+  const lineMat = decal(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), 2);
+  const bandMat = decal(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false }), 1);
+  const flat = (mesh, y = 0.02) => { mesh.rotation.x = -Math.PI / 2; mesh.position.y = y; return mesh; };
+
+  const compassGroup = new THREE.Group();
+  scene.add(compassGroup);
+  const letters = COMPASS.map((name, k) => {
+    const tex = canvasTexture(128, (g, n) => {
+      g.clearRect(0, 0, n, n);
+      g.fillStyle = "#fff"; g.font = `bold ${name.length > 1 ? 64 : 90}px sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(name, n / 2, n / 2 + 4);
+    });
+    const mat = decal(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: 0xffffff }), 3);
+    const m = flat(new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), mat), 0.025);
+    const a = (90 - 45 * k) * Math.PI / 180;  // N is away from the pilot (−z), E to the right
+    m.userData.dir = new THREE.Vector2(Math.cos(a), -Math.sin(a));
+    compassGroup.add(m);
+    return m;
+  });
+
   return {
     sun,
-    setTarget(cfg, visible) {
+    setPattern(p = DEFAULT_PATTERN) {
+      patternGroup.clear();
+      if (!p || p.kind === "none") return;
+      const R = p.radius, b = p.band ?? 2.5;
+      const centers = p.kind === "eight" ? [-R, R] : [0];
+      for (const x of centers) {
+        const line = flat(new THREE.Mesh(new THREE.RingGeometry(R - 0.06, R + 0.06, 160), lineMat));
+        const band = flat(new THREE.Mesh(new THREE.RingGeometry(Math.max(0.1, R - b), R + b, 160), bandMat), 0.015);
+        line.position.x = band.position.x = x;
+        line.position.z = band.position.z = -p.distance;
+        patternGroup.add(band, line);
+      }
+    },
+    setCompass(cfg, visible) {
+      compassGroup.visible = visible;
+      const r = cfg.circle / 2 + 0.55;
+      for (const m of letters) m.position.set(m.userData.dir.x * r, 0.025, -cfg.distance + m.userData.dir.y * r);
+    },
+    /** Light up the compass point to stop at next (or none). */
+    highlightCompass(k) {
+      letters.forEach((m, i) => m.material.color.setHex(i === k ? 0x4be37a : 0xffffff));
+    },
+    setTarget(cfg, visible, showColumn = true) {
       targetGroup.visible = visible;
+      column.visible = showColumn;
       const rad = cfg.circle / 2;
       targetGroup.position.set(0, 0, -cfg.distance);
       groundRing.scale.set(rad, rad, 1);
@@ -251,8 +309,8 @@ export function buildWorld(scene) {
       column.scale.set(rad, hi - lo, rad);
       column.position.y = (lo + hi) / 2;
     },
-    setInside(inside) {
-      const c = inside ? 0x4be37a : 0xffd23f;
+    setZone(zone) {
+      const c = { in: 0x4be37a, edge: 0xffd23f, out: 0xff5a4e }[zone];
       ringMat.color.setHex(c); airMat.color.setHex(c); colMat.color.setHex(c);
     },
     update(heliPos, wind) {

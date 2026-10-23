@@ -7,6 +7,7 @@
 
 import { v3, sub, cross, clamp, wrapPi, DEG, irot, rot, norm } from "./math.js";
 import { G } from "./heli.js";
+import { ExerciseScorer, DEFAULT_PATTERN } from "./exercises.js";
 
 export const ORIENTATIONS = {
   tail: { label: "Tail-in", heading: 90 },
@@ -29,6 +30,8 @@ export const DEFAULT_TRAINER = {
   gain: 0.6,                // 0 = gentle/robust, 1 = tight/fast
   heightWindow: 0,          // m either side of the target height that still counts; 0 = any height
   leaveIsCrash: false,      // HELI-X style: wandering out of the circle ends the attempt
+  pattern: DEFAULT_PATTERN, // ground outline scored automatically: circles or 8s
+  compass: false,           // compass points on the hover circle, scoring 8-point piros
 };
 
 const LEAVE_MARGIN = 0.25;  // m past the circle's edge before leaving counts as a crash
@@ -42,11 +45,24 @@ export class Trainer {
   resetScore() {
     this.t = 0;
     this.inside = false;
+    this.zone = "in";  // "in" | "edge" | "out"
     this.timeIn = 0;
     this.timeTotal = 0;
     this.streak = 0;
     this.best = 0;
     this.crashes = 0;
+    this.scorer = null;
+  }
+
+  /** The pattern scorer for the current settings, rebuilt when they change. */
+  get exercise() {
+    const c = this.cfg;
+    const key = JSON.stringify([c.pattern, c.compass && c.kind === "hover", c.distance, c.circle]);
+    if (!this.scorer || this.scorerKey !== key) {
+      this.scorer = new ExerciseScorer(c.pattern || DEFAULT_PATTERN, c.compass && c.kind === "hover" ? { center: this.target, radius: c.circle / 2 } : null);
+      this.scorerKey = key;
+    }
+    return this.scorer;
   }
 
   get target() {
@@ -71,6 +87,12 @@ export class Trainer {
    * Returns the sticks the heli should fly with.
    */
   update(heli, pilot, dt) {
+    const out = this.fly(heli, pilot, dt);
+    this.exercise.update(heli, dt, { inside: this.inside });
+    return out;
+  }
+
+  fly(heli, pilot, dt) {
     const c = this.cfg;
     this.t += dt;
     const out = { ...pilot };
@@ -128,6 +150,10 @@ export class Trainer {
     const r = Math.hypot(d.x, d.z);
     const hw = c.heightWindow ?? 0;
     this.inside = r <= c.circle / 2 && !heli.onGround && (hw <= 0 || Math.abs(d.y) <= hw);
+    // near the edge: the outer 30% of the radius (at least 0.3 m), or near the height window's limits
+    const edge = Math.max(0.3, 0.15 * c.circle);
+    const nearEdge = r > c.circle / 2 - edge || (hw > 0 && Math.abs(d.y) > hw - 0.3);
+    this.zone = !this.inside ? "out" : nearEdge ? "edge" : "in";
     if (c.leaveIsCrash && this.t > 0.5 && r > c.circle / 2 + LEAVE_MARGIN) heli.crash("Left the circle");
     this.timeTotal += dt;
     if (this.inside) { this.timeIn += dt; this.streak += dt; this.best = Math.max(this.best, this.streak); }
