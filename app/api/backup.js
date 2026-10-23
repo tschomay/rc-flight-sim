@@ -32,7 +32,8 @@ async function withAccess(fn) {
 
 const fail = (e) => {
   const msg = String(e?.message || e);
-  const status = /token|unauthori[sz]ed|forbidden|access denied/i.test(msg) ? 401 : 502;
+  // a wrong or revoked token shows up as an unknown store or a rejected request
+  const status = /token|unauthori[sz]ed|forbidden|access denied|store does not exist|400 bad request/i.test(msg) ? 401 : 502;
   return json(status, { error: status === 401 ? "The Blob token was rejected. Check it in Vercel → Storage → your Blob store." : msg });
 };
 
