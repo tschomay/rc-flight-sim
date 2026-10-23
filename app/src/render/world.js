@@ -231,7 +231,10 @@ export function buildWorld(scene) {
   const airMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.3, depthWrite: false });
   const airRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.008, 6, 64), airMat);
   airRing.rotation.x = Math.PI / 2;
-  targetGroup.add(groundRing, airRing);
+  // the scoring column: faint walls over the circle, the full height that counts
+  const colMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide });
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 64, 1, true), colMat);
+  targetGroup.add(groundRing, airRing, column);
   scene.add(targetGroup);
 
   return {
@@ -243,10 +246,14 @@ export function buildWorld(scene) {
       groundRing.scale.set(rad, rad, 1);
       airRing.scale.set(rad, rad, rad);
       airRing.position.y = cfg.height;
+      const hw = cfg.heightWindow ?? 0;
+      const lo = hw > 0 ? Math.max(0, cfg.height - hw) : 0, hi = hw > 0 ? cfg.height + hw : 8;
+      column.scale.set(rad, hi - lo, rad);
+      column.position.y = (lo + hi) / 2;
     },
     setInside(inside) {
       const c = inside ? 0x4be37a : 0xffd23f;
-      ringMat.color.setHex(c); airMat.color.setHex(c);
+      ringMat.color.setHex(c); airMat.color.setHex(c); colMat.color.setHex(c);
     },
     update(heliPos, wind) {
       sun.target.position.copy(heliPos);

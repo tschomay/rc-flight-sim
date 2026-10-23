@@ -5,7 +5,7 @@
 // on a buddy box: nothing is pinned in place, so wind and the heli's own dynamics still
 // show. Heading can be held, rotated continuously either way, or swung ±90°.
 
-import { v3, sub, cross, clamp, wrapPi, DEG, irot } from "./math.js";
+import { v3, sub, cross, clamp, wrapPi, DEG, irot, rot, norm } from "./math.js";
 import { G } from "./heli.js";
 
 export const ORIENTATIONS = {
@@ -27,7 +27,11 @@ export const DEFAULT_TRAINER = {
   rotationSpeed: 20,        // deg/s
   swingPeriod: 8,           // s for a full -90 → +90 → -90 swing
   gain: 0.6,                // 0 = gentle/robust, 1 = tight/fast
+  heightWindow: 0,          // m either side of the target height that still counts; 0 = any height
+  leaveIsCrash: false,      // HELI-X style: wandering out of the circle ends the attempt
 };
+
+const LEAVE_MARGIN = 0.25;  // m past the circle's edge before leaving counts as a crash
 
 export class Trainer {
   constructor(cfg = DEFAULT_TRAINER) {
@@ -118,12 +122,38 @@ export class Trainer {
       out.yaw = clamp((-rw * sgn) / (heli.def.rates.yaw * DEG), -1, 1);
     }
 
-    // score: horizontally inside the circle and within a metre of the target height
+    // score: the circle is a column. Inside means over the circle and off the ground, and,
+    // if a height window is set, within it of the target height.
     const d = sub(heli.pos, this.target);
-    this.inside = Math.hypot(d.x, d.z) <= c.circle / 2 && Math.abs(d.y) <= 1;
+    const r = Math.hypot(d.x, d.z);
+    const hw = c.heightWindow ?? 0;
+    this.inside = r <= c.circle / 2 && !heli.onGround && (hw <= 0 || Math.abs(d.y) <= hw);
+    if (c.leaveIsCrash && this.t > 0.5 && r > c.circle / 2 + LEAVE_MARGIN) heli.crash("Left the circle");
     this.timeTotal += dt;
     if (this.inside) { this.timeIn += dt; this.streak += dt; this.best = Math.max(this.best, this.streak); }
     else this.streak = 0;
     return out;
   }
+}
+
+/**
+ * Self-levelling ("stability mode", like Blade SAFE or a FBL rescue-assisted mode): the
+ * cyclic stick sets a tilt angle instead of a roll/pitch rate, and centring the stick
+ * levels the heli. Only acts while upright; inverted, the pilot's rate commands pass
+ * through so flips still work. Returns new sticks.
+ */
+export function selfLevel(heli, pilot, maxTilt = 30) {
+  const up = heli.up;
+  if (up.y <= 0.2) return pilot;
+  const fwd = rot(heli.q, v3(1, 0, 0)), right = rot(heli.q, v3(0, 0, 1));
+  const f = norm(v3(fwd.x, 0, fwd.z)), r = norm(v3(right.x, 0, right.z));
+  const tp = Math.tan(pilot.pitch * maxTilt * DEG), tr = Math.tan(pilot.roll * maxTilt * DEG);
+  const want = norm(v3(f.x * tp + r.x * tr, 1, f.z * tp + r.z * tr));
+  const errB = irot(heli.q, cross(up, want));
+  const k = 8;
+  return {
+    ...pilot,
+    roll: clamp((k * errB.x) / (heli.def.rates.roll * DEG), -1, 1),
+    pitch: clamp((-k * errB.z) / (heli.def.rates.pitch * DEG), -1, 1),
+  };
 }

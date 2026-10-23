@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { Heli } from "./sim/heli.js";
 import { MODELS } from "./sim/models.js";
-import { Trainer } from "./sim/trainer.js";
+import { Trainer, selfLevel } from "./sim/trainer.js";
 import { Wind } from "./sim/wind.js";
 import { buildWorld } from "./render/world.js";
 import { HeliMesh } from "./render/heliMesh.js";
@@ -15,6 +15,7 @@ import { TouchSticks } from "./input/touch.js";
 import { Keyboard } from "./input/keyboard.js";
 import { loadSettings, saveSettings } from "./ui/settings.js";
 import { UI } from "./ui/ui.js";
+import { planNext, trainerFor, sessionEntry } from "./school/school.js";
 
 const DT = 0.001;
 const expo = (x, p) => (1 - p) * x + p * x * x * x;
@@ -61,6 +62,8 @@ class App {
       if (e.code === "Digit2") this.setMode("idle");
       if (e.code === "Digit3") this.setMode("hold");
       if (e.code === "KeyR") this.restart();
+      if (e.code === "BracketLeft") this.setTimeScale(this.settings.timeScale - 5);
+      if (e.code === "BracketRight") this.setTimeScale(this.settings.timeScale + 5);
     });
     let lastTap = 0;
     this.renderer.domElement.addEventListener("pointerdown", () => {
@@ -98,6 +101,7 @@ class App {
     this.trainer.cfg = structuredClone(s.trainer);
     this.wind.set(s.wind);
     this.cardboard.setLens(s.view.lens);
+    this.cardboard.headTracking = s.view.headTracking;
     this.world.setTarget(s.trainer, s.trainer.kind === "hover");
   }
 
@@ -112,6 +116,45 @@ class App {
     this.mode = m;
     this.settings.mode = m;
     saveSettings(this.settings);
+  }
+
+  setTimeScale(pct) {
+    this.settings.timeScale = Math.max(20, Math.min(100, Math.round(pct)));
+    saveSettings(this.settings);
+    this.ui.toast(`Sim speed ${this.settings.timeScale}%`, 900);
+  }
+
+  // ---------- flight school sessions ----------
+  startSession() {
+    const s = this.settings;
+    const { plan } = planNext(s.school);
+    s.school.override = null;  // an override is for one session
+    // restarting mid-session keeps the settings from before the first one
+    const prev = this.session?.prev || { trainer: structuredClone(s.trainer), timeScale: s.timeScale };
+    this.session = { plan, startedAt: Date.now(), elapsed: 0, crashes: 0, outOfArea: 0, prev };
+    s.trainer = trainerFor(plan, s.school, s.trainer);
+    s.timeScale = plan.speed;
+    saveSettings(s);
+    this.applyAll();
+    this.trainer.resetScore();
+    this.restart();
+  }
+
+  /** Stop the session and hand the draft log entry to the UI to confirm or edit. */
+  endSession() {
+    const ss = this.session;
+    if (!ss) return;
+    this.session = null;
+    const s = this.settings;
+    const entry = sessionEntry(ss.plan, { startedAt: ss.startedAt, seconds: ss.elapsed, crashes: ss.crashes, outOfArea: ss.outOfArea });
+    // log what was actually flown, in case settings were changed mid-session
+    entry.speed = s.timeScale;
+    if (ss.plan.kind === "hover") { entry.collAssist = s.trainer.assist.collective; entry.rudderAssist = s.trainer.assist.rudder; }
+    s.trainer = ss.prev.trainer;
+    s.timeScale = ss.prev.timeScale;
+    saveSettings(s);
+    this.applyAll();
+    this.ui.sessionEnded(entry);
   }
 
   restart() {
@@ -168,12 +211,17 @@ class App {
     this.last = now;
     const { sticks, source } = this.readInput(dt);
 
+    if (this.session && !this.paused) {
+      this.session.elapsed += dt;
+      if (this.session.elapsed >= this.settings.school.sessionMinutes * 60) { this.ui.toast("Session complete", 2000); this.endSession(); }
+    }
     if (!this.paused) {
-      this.acc += dt;
+      this.acc += dt * this.settings.timeScale / 100;
       let n = 0;
       while (this.acc >= DT && n < 60) {
         const wind = this.wind.step(DT);
-        const ctl = this.trainer.update(this.heli, sticks, DT);
+        const pilot = this.settings.selfLevel ? selfLevel(this.heli, sticks) : sticks;
+        const ctl = this.trainer.update(this.heli, pilot, DT);
         this.heli.step(ctl, { wind }, DT);
         this.acc -= DT; n++;
       }
@@ -184,12 +232,13 @@ class App {
       if (!this.crashAt) {
         this.crashAt = now;
         this.trainer.crashes++;
+        if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
         this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : " — tap Reset"}`, 0);
       } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart();
     }
 
     const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
-    this.mesh.update(this.heli, dt);
+    this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
     this.world.update(hp, this.wind.current);
     this.world.setInside(this.trainer.inside);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
@@ -235,7 +284,7 @@ class App {
     try { this.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
     this.cardboard.start();
     this.resize();
-    this.ui.toast("Tap once to centre the view, twice to reset", 3000);
+    this.ui.toast(this.settings.view.headTracking ? "Tap once to centre the view, twice to reset" : "Tap twice to reset", 3000);
   }
 
   exitVR() {
