@@ -149,3 +149,30 @@ for (const id of Object.keys(MODELS)) {
     });
   }
 }
+
+test("trainer: the circle counts at any height by default, and can be limited to a window", () => {
+  const h = new Heli(MODELS.fbl450);
+  const tr = new Trainer({ ...DEFAULT_TRAINER, height: 1.5 });
+  tr.start(h);
+  h.reset({ pos: v3(0.4, 5, -DEFAULT_TRAINER.distance), airborne: true });
+  tr.update(h, sticks(), DT);
+  assert.equal(tr.inside, true, "5 m above the circle is inside");
+  tr.cfg.heightWindow = 1;
+  tr.update(h, sticks(), DT);
+  assert.equal(tr.inside, false, "outside a ±1 m window");
+  h.reset({ pos: v3(4, 1.5, -DEFAULT_TRAINER.distance), airborne: true });
+  tr.cfg.heightWindow = 0;
+  tr.update(h, sticks(), DT);
+  assert.equal(tr.inside, false, "beside the circle is outside");
+});
+
+test("trainer: leaving the circle can count as a crash", () => {
+  const h = new Heli(MODELS.fbl450);
+  const tr = new Trainer({ ...DEFAULT_TRAINER, circle: 3, leaveIsCrash: true });
+  tr.start(h);
+  for (let i = 0; i < 600; i++) tr.update(h, sticks(), DT);
+  assert.equal(h.crashed, null, "still inside after spawning");
+  h.reset({ pos: v3(2, 1.5, -DEFAULT_TRAINER.distance), airborne: true });
+  tr.update(h, sticks(), DT);
+  assert.equal(h.crashed, "Left the circle");
+});

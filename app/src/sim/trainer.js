@@ -27,7 +27,11 @@ export const DEFAULT_TRAINER = {
   rotationSpeed: 20,        // deg/s
   swingPeriod: 8,           // s for a full -90 → +90 → -90 swing
   gain: 0.6,                // 0 = gentle/robust, 1 = tight/fast
+  heightWindow: 0,          // m either side of the target height that still counts; 0 = any height
+  leaveIsCrash: false,      // HELI-X style: wandering out of the circle ends the attempt
 };
+
+const LEAVE_MARGIN = 0.25;  // m past the circle's edge before leaving counts as a crash
 
 export class Trainer {
   constructor(cfg = DEFAULT_TRAINER) {
@@ -118,9 +122,13 @@ export class Trainer {
       out.yaw = clamp((-rw * sgn) / (heli.def.rates.yaw * DEG), -1, 1);
     }
 
-    // score: horizontally inside the circle and within a metre of the target height
+    // score: the circle is a column. Inside means over the circle and off the ground, and,
+    // if a height window is set, within it of the target height.
     const d = sub(heli.pos, this.target);
-    this.inside = Math.hypot(d.x, d.z) <= c.circle / 2 && Math.abs(d.y) <= 1;
+    const r = Math.hypot(d.x, d.z);
+    const hw = c.heightWindow ?? 0;
+    this.inside = r <= c.circle / 2 && !heli.onGround && (hw <= 0 || Math.abs(d.y) <= hw);
+    if (c.leaveIsCrash && this.t > 0.5 && r > c.circle / 2 + LEAVE_MARGIN) heli.crash("Left the circle");
     this.timeTotal += dt;
     if (this.inside) { this.timeIn += dt; this.streak += dt; this.best = Math.max(this.best, this.streak); }
     else this.streak = 0;

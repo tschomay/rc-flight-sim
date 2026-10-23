@@ -98,6 +98,7 @@ export class UI {
       h("span", { class: "chip" }, `${Math.round(heli.rpm)} rpm`),
       h("span", { class: "chip" }, `${heli.height.toFixed(1)} m`),
       heli.inverted ? h("span", { class: "chip inv" }, "INVERTED") : null,
+      this.app.settings.timeScale < 100 ? h("span", { class: "chip slow" }, `${this.app.settings.timeScale}% speed`) : null,
       h("span", { class: "chip dim" }, source),
     ];
     const score = tr ? h("div", { class: `score ${trainer.inside ? "in" : ""}` },
@@ -132,6 +133,7 @@ export class UI {
 
   tab_train(s) {
     const t = s.trainer;
+    const speed = slider("Sim speed", 20, 100, 5, s.timeScale, (v) => { s.timeScale = v; this.changed("misc"); }, (v) => `${v}%`);
     const set = (k, what = "trainer") => (v) => { t[k] = v; this.changed(what); };
     const preset = (label, cfg) => h("button", { type: "button", class: "preset", onclick: () => {
       Object.assign(t, { kind: "hover", ...cfg, assist: { ...t.assist, ...(cfg.assist || {}) } });
@@ -145,6 +147,8 @@ export class UI {
         preset("Nose-in hover", { inverted: false, rotation: "off", orientation: "nose", assist: { collective: true, rudder: true, cyclic: false } }),
         preset("Free flight", { kind: "free" }),
       ),
+      speed,
+      h("p", { class: "hint" }, "Slows the whole sim. Keyboard: [ slower, ] faster."),
       seg("Exercise", [["hover", "Hover trainer"], ["free", "Free flight"]], t.kind, set("kind", "trainer-restart")),
       h("fieldset", { class: "field" }, h("legend", {}, "The trainer flies"),
         toggle("Collective", t.assist.collective, (v) => { t.assist.collective = v; this.changed("trainer"); }, "holds the height"),
@@ -157,6 +161,8 @@ export class UI {
       slider("Swing period", 4, 20, 1, t.swingPeriod, set("swingPeriod"), (v) => `${v} s`),
       slider("Height", 0.5, 5, 0.1, t.height, set("height"), fmt1("m")),
       seg("Circle diameter", [[1, "1 m"], [2, "2 m"], [3, "3 m"], [4, "4 m"]].map(([v, l]) => [v, l]), t.circle, (v) => { t.circle = +v; this.changed("trainer"); }),
+      seg("Counts as inside", [[0, "Any height"], [1, "±1 m"], [2, "±2 m"]], t.heightWindow ?? 0, (v) => { t.heightWindow = +v; this.changed("trainer"); }),
+      toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "like HELI-X: wander out and the heli resets"),
       slider("Distance from you", 2, 12, 0.5, t.distance, set("distance", "trainer-restart"), fmt1("m")),
       slider("Trainer strength", 0, 1, 0.05, t.gain, set("gain"), (v) => (v < 0.35 ? "gentle" : v < 0.7 ? "normal" : "tight")),
       h("div", { class: "row" },

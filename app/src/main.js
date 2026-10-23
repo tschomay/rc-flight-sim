@@ -61,6 +61,8 @@ class App {
       if (e.code === "Digit2") this.setMode("idle");
       if (e.code === "Digit3") this.setMode("hold");
       if (e.code === "KeyR") this.restart();
+      if (e.code === "BracketLeft") this.setTimeScale(this.settings.timeScale - 5);
+      if (e.code === "BracketRight") this.setTimeScale(this.settings.timeScale + 5);
     });
     let lastTap = 0;
     this.renderer.domElement.addEventListener("pointerdown", () => {
@@ -112,6 +114,12 @@ class App {
     this.mode = m;
     this.settings.mode = m;
     saveSettings(this.settings);
+  }
+
+  setTimeScale(pct) {
+    this.settings.timeScale = Math.max(20, Math.min(100, Math.round(pct)));
+    saveSettings(this.settings);
+    this.ui.toast(`Sim speed ${this.settings.timeScale}%`, 900);
   }
 
   restart() {
@@ -169,7 +177,7 @@ class App {
     const { sticks, source } = this.readInput(dt);
 
     if (!this.paused) {
-      this.acc += dt;
+      this.acc += dt * this.settings.timeScale / 100;
       let n = 0;
       while (this.acc >= DT && n < 60) {
         const wind = this.wind.step(DT);
@@ -189,7 +197,7 @@ class App {
     }
 
     const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
-    this.mesh.update(this.heli, dt);
+    this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
     this.world.update(hp, this.wind.current);
     this.world.setInside(this.trainer.inside);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
