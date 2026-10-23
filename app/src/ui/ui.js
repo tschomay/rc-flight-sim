@@ -3,9 +3,10 @@
 
 import { MODELS } from "../sim/models.js";
 import { ORIENTATIONS } from "../sim/trainer.js";
+import { schoolTab, sessionEndCard, schoolChip } from "./school.js";
 import { FUNCTIONS, SWITCHES, snapshot, firstGamepad, channelFromCaptures, readMapped } from "../input/gamepad.js";
 
-const h = (tag, attrs = {}, ...kids) => {
+export const h = (tag, attrs = {}, ...kids) => {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
     if (k === "class") el.className = v;
@@ -19,7 +20,7 @@ const h = (tag, attrs = {}, ...kids) => {
 
 let uid = 0;
 
-function seg(label, options, value, set) {
+export function seg(label, options, value, set) {
   const name = `seg${uid++}`;
   return h("fieldset", { class: "field seg" }, h("legend", {}, label),
     h("div", { class: "seg-row" }, options.map(([v, text]) => {
@@ -28,14 +29,14 @@ function seg(label, options, value, set) {
     })));
 }
 
-function toggle(label, value, set, hint) {
+export function toggle(label, value, set, hint) {
   const id = `t${uid++}`;
   return h("div", { class: "field toggle" },
     h("input", { type: "checkbox", id, checked: !!value, onchange: (e) => set(e.target.checked) }),
     h("label", { for: id }, label, hint ? h("small", {}, hint) : null));
 }
 
-function slider(label, min, max, step, value, set, fmt = (v) => v) {
+export function slider(label, min, max, step, value, set, fmt = (v) => v) {
   const id = `s${uid++}`;
   const out = h("output", { for: id }, fmt(value));
   return h("div", { class: "field slider" },
@@ -99,6 +100,7 @@ export class UI {
       h("span", { class: "chip" }, `${heli.height.toFixed(1)} m`),
       heli.inverted ? h("span", { class: "chip inv" }, "INVERTED") : null,
       this.app.settings.timeScale < 100 ? h("span", { class: "chip slow" }, `${this.app.settings.timeScale}% speed`) : null,
+      schoolChip(this.app),
       h("span", { class: "chip dim" }, source),
     ];
     const score = tr ? h("div", { class: `score ${trainer.inside ? "in" : ""}` },
@@ -112,7 +114,7 @@ export class UI {
     this.tab = tab;
     const s = this.app.settings;
     const sheet = this.el.sheet;
-    const tabs = [["train", "Training"], ["heli", "Helicopter"], ["tx", "Transmitter"], ["view", "View & wind"]];
+    const tabs = [["train", "Training"], ["school", "Flight school"], ["heli", "Helicopter"], ["tx", "Transmitter"], ["view", "View & wind"]];
     const body = h("div", { class: "sheet-body" }, this[`tab_${tab}`](s));
     sheet.replaceChildren(
       h("div", { class: "sheet-head" },
@@ -130,6 +132,10 @@ export class UI {
   }
 
   changed(what) { this.app.saveAndApply(what); }
+
+  tab_school(s) { return schoolTab(this, s); }
+
+  sessionEnded(entry) { sessionEndCard(this, entry); }
 
   tab_train(s) {
     const t = s.trainer;

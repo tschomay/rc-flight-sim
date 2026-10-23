@@ -15,6 +15,7 @@ import { TouchSticks } from "./input/touch.js";
 import { Keyboard } from "./input/keyboard.js";
 import { loadSettings, saveSettings } from "./ui/settings.js";
 import { UI } from "./ui/ui.js";
+import { planNext, trainerFor, sessionEntry } from "./school/school.js";
 
 const DT = 0.001;
 const expo = (x, p) => (1 - p) * x + p * x * x * x;
@@ -122,6 +123,37 @@ class App {
     this.ui.toast(`Sim speed ${this.settings.timeScale}%`, 900);
   }
 
+  // ---------- flight school sessions ----------
+  startSession() {
+    const s = this.settings;
+    const { plan } = planNext(s.school);
+    s.school.override = null;  // an override is for one session
+    this.session = { plan, startedAt: Date.now(), elapsed: 0, crashes: 0, outOfArea: 0, prev: { trainer: structuredClone(s.trainer), timeScale: s.timeScale } };
+    s.trainer = trainerFor(plan, s.school, s.trainer);
+    s.timeScale = plan.speed;
+    saveSettings(s);
+    this.applyAll();
+    this.trainer.resetScore();
+    this.restart();
+  }
+
+  /** Stop the session and hand the draft log entry to the UI to confirm or edit. */
+  endSession() {
+    const ss = this.session;
+    if (!ss) return;
+    this.session = null;
+    const s = this.settings;
+    const entry = sessionEntry(ss.plan, { startedAt: ss.startedAt, seconds: ss.elapsed, crashes: ss.crashes, outOfArea: ss.outOfArea });
+    // log what was actually flown, in case settings were changed mid-session
+    entry.speed = s.timeScale;
+    if (ss.plan.kind === "hover") { entry.collAssist = s.trainer.assist.collective; entry.rudderAssist = s.trainer.assist.rudder; }
+    s.trainer = ss.prev.trainer;
+    s.timeScale = ss.prev.timeScale;
+    saveSettings(s);
+    this.applyAll();
+    this.ui.sessionEnded(entry);
+  }
+
   restart() {
     this.crashAt = 0;
     this.ui.hideToast();
@@ -176,6 +208,10 @@ class App {
     this.last = now;
     const { sticks, source } = this.readInput(dt);
 
+    if (this.session && !this.paused) {
+      this.session.elapsed += dt;
+      if (this.session.elapsed >= this.settings.school.sessionMinutes * 60) { this.ui.toast("Session complete", 2000); this.endSession(); }
+    }
     if (!this.paused) {
       this.acc += dt * this.settings.timeScale / 100;
       let n = 0;
@@ -192,6 +228,7 @@ class App {
       if (!this.crashAt) {
         this.crashAt = now;
         this.trainer.crashes++;
+        if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
         this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : " — tap Reset"}`, 0);
       } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart();
     }

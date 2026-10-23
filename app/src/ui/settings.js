@@ -3,6 +3,7 @@
 
 import { DEFAULT_TRAINER } from "../sim/trainer.js";
 import { DEFAULT_MODEL } from "../sim/models.js";
+import { DEFAULT_SCHOOL } from "../school/school.js";
 
 const KEY = "rc-heli-sim.settings.v1";
 
@@ -16,6 +17,7 @@ export const DEFAULTS = {
   view: { fov: 34, autoZoom: true, vrMode: "auto", lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
   wind: { speed: 0, from: 0, gust: 0.3 },
   autoReset: true,
+  school: DEFAULT_SCHOOL,
   timeScale: 100,                     // % of real time the sim runs at
 };
 

@@ -112,6 +112,27 @@ details ol { margin: 6px 0 0; padding-left: 1.2em; display: grid; gap: 4px; colo
 .wiz-card { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; padding: 16px; width: min(440px, 100%); max-height: 100%; overflow-y: auto; display: grid; gap: 12px; }
 .wiz-step { margin: 0; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .wiz-text { margin: 0; font-size: 16px; font-weight: 600; }
+/* flight school */
+.chip.school { border-color: var(--ok); color: var(--ok); }
+.sheet-body h2 { margin: 6px 0 0; font-size: 15px; }
+.lesson { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.lesson h3 { margin: 0; font-size: 15px; color: var(--accent); }
+.lesson p, .lesson ul { margin: 0; font-size: 13px; }
+.lesson ul { padding-left: 1.2em; color: var(--muted); }
+.lesson .goal b { color: var(--ok); }
+.plan { display: grid; gap: 12px; }
+.credit { margin: 0; font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--accent); padding-left: 10px; }
+.credit a, button.link { color: var(--accent); }
+button.link { background: none; border: 0; padding: 0; text-decoration: underline; }
+.callout { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(75, 227, 122, 0.1); border: 1px solid rgba(75, 227, 122, 0.35); font-size: 13px; display: grid; gap: 6px; }
+.callout.warn { background: rgba(255, 210, 63, 0.1); border-color: rgba(255, 210, 63, 0.4); }
+.lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+select, input[type="number"], input[type="datetime-local"], textarea { font: inherit; color: var(--ink); background: #0f1315; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; width: 100%; }
+.log { display: grid; gap: 4px; }
+.log-row { display: grid; grid-template-columns: 7.5em 1fr auto; gap: 2px 8px; align-items: baseline; text-align: left; font-size: 12.5px; padding: 6px 8px; }
+.log-row small { grid-column: 2 / -1; color: var(--muted); }
+.log-row b { font: 600 12px var(--mono); color: var(--warn); } .log-row b.ok { color: var(--ok); }
+.log-row.jump { border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
 [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
