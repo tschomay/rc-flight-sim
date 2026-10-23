@@ -42,6 +42,7 @@ export class Trainer {
   resetScore() {
     this.t = 0;
     this.inside = false;
+    this.zone = "in";  // "in" | "edge" | "out"
     this.timeIn = 0;
     this.timeTotal = 0;
     this.streak = 0;
@@ -128,6 +129,10 @@ export class Trainer {
     const r = Math.hypot(d.x, d.z);
     const hw = c.heightWindow ?? 0;
     this.inside = r <= c.circle / 2 && !heli.onGround && (hw <= 0 || Math.abs(d.y) <= hw);
+    // near the edge: the outer 30% of the radius (at least 0.3 m), or near the height window's limits
+    const edge = Math.max(0.3, 0.15 * c.circle);
+    const nearEdge = r > c.circle / 2 - edge || (hw > 0 && Math.abs(d.y) > hw - 0.3);
+    this.zone = !this.inside ? "out" : nearEdge ? "edge" : "in";
     if (c.leaveIsCrash && this.t > 0.5 && r > c.circle / 2 + LEAVE_MARGIN) heli.crash("Left the circle");
     this.timeTotal += dt;
     if (this.inside) { this.timeIn += dt; this.streak += dt; this.best = Math.max(this.best, this.streak); }

@@ -80,7 +80,10 @@ class App {
 
   /** The model definition with the user's rate scaling applied. */
   modelDef() {
-    const def = structuredClone(MODELS[this.settings.model]);
+    const s = this.settings;
+    const def = structuredClone(MODELS[s.model]);
+    if (s.bladeColor === "white") def.look.blade = 0xf4f4f0;
+    if (s.idlePitch) def.pitch.idle = def.pitch.hold = [-s.idlePitch, s.idlePitch];
     const k = this.settings.rates / 100;
     for (const a of ["roll", "pitch", "yaw"]) def.rates[a] *= k;
     return def;
@@ -102,7 +105,7 @@ class App {
     this.wind.set(s.wind);
     this.cardboard.setLens(s.view.lens);
     this.cardboard.headTracking = s.view.headTracking;
-    this.world.setTarget(s.trainer, s.trainer.kind === "hover");
+    this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
   }
 
   saveAndApply(what) {
@@ -240,7 +243,7 @@ class App {
     const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
     this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
     this.world.update(hp, this.wind.current);
-    this.world.setInside(this.trainer.inside);
+    this.world.setZone(this.trainer.zone);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {
@@ -252,6 +255,14 @@ class App {
       this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov });
       this.flat.render(this.renderer, this.scene);
     }
+  }
+
+  async toggleFullscreen() {
+    const root = document.documentElement;
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else await (root.requestFullscreen || root.webkitRequestFullscreen).call(root, { navigationUI: "hide" });
+    } catch { this.ui.toast("Full screen isn't available here"); }
   }
 
   async enterVR() {

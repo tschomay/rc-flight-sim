@@ -60,6 +60,11 @@ export class UI {
     document.getElementById("btn-menu").addEventListener("click", () => this.openSheet());
     document.getElementById("btn-reset").addEventListener("click", () => app.restart());
     document.getElementById("btn-vr").addEventListener("click", () => app.enterVR());
+    const full = document.getElementById("btn-full");
+    const root = document.documentElement;
+    if (!root.requestFullscreen && !root.webkitRequestFullscreen) full.hidden = true;  // iPhone Safari: add to home screen instead
+    full.addEventListener("click", () => app.toggleFullscreen());
+    document.addEventListener("fullscreenchange", () => { full.textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; });
     this.el.vrExit.addEventListener("click", () => app.exitVR());
     this.buildModes();
     this.tab = "train";
@@ -103,8 +108,8 @@ export class UI {
       schoolChip(this.app),
       h("span", { class: "chip dim" }, source),
     ];
-    const score = tr ? h("div", { class: `score ${trainer.inside ? "in" : ""}` },
-      h("b", {}, trainer.inside ? "In circle" : "Outside"),
+    const score = tr ? h("div", { class: `score ${trainer.zone}` },
+      h("b", {}, { in: "In circle", edge: "Near the edge", out: "Outside" }[trainer.zone]),
       ` ${trainer.streak.toFixed(1)} s · best ${trainer.best.toFixed(1)} s · ${pct}% of ${Math.round(trainer.timeTotal)} s`) : null;
     this.el.hud.replaceChildren(h("div", { class: "chips" }, rows), score);
   }
@@ -168,6 +173,7 @@ export class UI {
       slider("Height", 0.5, 5, 0.1, t.height, set("height"), fmt1("m")),
       seg("Circle diameter", [[1, "1 m"], [2, "2 m"], [3, "3 m"], [4, "4 m"]].map(([v, l]) => [v, l]), t.circle, (v) => { t.circle = +v; this.changed("trainer"); }),
       seg("Counts as inside", [[0, "Any height"], [1, "±1 m"], [2, "±2 m"]], t.heightWindow ?? 0, (v) => { t.heightWindow = +v; this.changed("trainer"); }),
+      toggle("Show the column above the circle", s.view.column, (v) => { s.view.column = v; this.changed("trainer"); }, "the ring on the ground always shows"),
       toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "like HELI-X: wander out and the heli resets"),
       slider("Distance from you", 2, 12, 0.5, t.distance, set("distance", "trainer-restart"), fmt1("m")),
       slider("Trainer strength", 0, 1, 0.05, t.gain, set("gain"), (v) => (v < 0.35 ? "gentle" : v < 0.7 ? "normal" : "tight")),
@@ -190,8 +196,11 @@ export class UI {
           preset("Sport: 75%, 30%", 75, 30, 30),
           preset("3D: 100%, 20%", 100, 20, 20))),
       slider("Rates", 30, 130, 5, s.rates, (v) => { s.rates = v; this.changed("model"); }, (v) => `${v}%`),
+      seg("Idle-up collective range", [[8, "\u00b18\u00b0"], [10, "\u00b110\u00b0"], [12, "\u00b112\u00b0"]], s.idlePitch, (v) => { s.idlePitch = +v; this.changed("model"); }),
+      h("p", { class: "hint" }, "Idle up feels twitchier than Normal because the same stick travel covers \u221212\u2026+12\u00b0 instead of \u22124\u2026+12\u00b0, at higher headspeed. A smaller range softens the collective; \u00b112\u00b0 is a typical 3D setup."),
       slider("Cyclic expo", 0, 80, 5, s.expo.cyclic, (v) => { s.expo.cyclic = v; this.changed("expo"); }, (v) => `${v}%`),
       slider("Rudder expo", 0, 80, 5, s.expo.rudder, (v) => { s.expo.rudder = v; this.changed("expo"); }, (v) => `${v}%`),
+      seg("Blades", [["dark", "Dark"], ["white", "White"]], s.bladeColor, (v) => { s.bladeColor = v; this.changed("model"); }),
       toggle("Self-levelling (stability mode)", s.selfLevel, (v) => { s.selfLevel = v; this.changed("misc"); }, "the stick sets a tilt and letting go levels the heli, like Blade SAFE. Upright only; off for real 3D practice"),
       h("details", {}, h("summary", {}, "Feels twitchy? Every input over-corrects?"),
         h("ol", {},
@@ -236,6 +245,13 @@ export class UI {
           h("li", {}, "Dual rates 100%, expo 0, no mixes, all trims centred. The sim does curves, expo and flight modes."),
           h("li", {}, "Bind the radio to the WS2000 (hold the dongle's button while plugging it in, then bind as usual)."),
           h("li", {}, "Pick two switches (GEAR and FLAP/MIX) for idle-up and throttle hold in the wizard."))),
+      h("details", {}, h("summary", {}, "More switches on a DX6i (only one recognised?)"),
+        h("p", { class: "hint" }, "The DX6i sends six channels, so the sim can see at most two switch channels: ch 5 and ch 6. In an ACRO model:"),
+        h("ol", {},
+          h("li", {}, "GEAR drives ch 5. That's usually the one that works."),
+          h("li", {}, "FLAP drives ch 6, but only through the FLAPS menu. If both its positions are set to 0 (common), the switch moves nothing. In FLAPS, set NORM to 0 and LAND to 100 (leave the elevator values at 0), then run the wizard again and use FLAP for throttle hold."),
+          h("li", {}, "Want a third switch (e.g. reset)? Two switches can share one channel if each moves it to a different value. If your radio can mix a switch into ch 6 (a programmable mix turned on by the MIX switch), FLAP and MIX can then give ch 6 three positions. The wizard checks that each switch is distinguishable."),
+          h("li", {}, "The dual-rate, trainer and throttle-cut switches don't send channels in sim mode, so they can't be used."))),
       h("details", {}, h("summary", {}, "Heli model memory vs ACRO: what's the difference?"),
         h("p", { class: "hint" }, "A heli model memory works, but the radio shapes the sticks before the sim sees them:"),
         h("ol", {},
@@ -306,26 +322,33 @@ export class UI {
       }
       return used;
     };
+    // Two switches may share a channel (a 3-position channel, or one channel fed by two
+    // switches through a radio mix) as long as each one moves it to its own value.
     const switchProblem = (c, sw) => {
       const off = c[`sw-${sw.key}-off`], on = c[`sw-${sw.key}-on`];
       const sticks = stickChannels();
-      const others = SWITCHES.filter((o) => o !== sw && c[`sw-${o.key}`] !== "skip" && c[`sw-${o.key}-on`]).map((o) => channelFromCaptures(c[`sw-${o.key}-off`], c[`sw-${o.key}-on`], sticks)?.index);
-      const free = channelFromCaptures(off, on, [...sticks, ...others.filter((x) => x != null)]);
-      if (free) return null;
+      const ch = channelFromCaptures(off, on, sticks);
+      if (ch) {
+        const twin = SWITCHES.find((o) => {
+          if (o === sw || c[`sw-${o.key}`] === "skip" || !c[`sw-${o.key}-on`]) return false;
+          const oc = channelFromCaptures(c[`sw-${o.key}-off`], c[`sw-${o.key}-on`], sticks);
+          return oc && oc.index === ch.index && Math.abs(oc.hi - ch.hi) < 0.25;
+        });
+        return twin ? `That switch moves ch ${ch.index + 1} to the same place as the ${twin.label.toLowerCase()} switch, so the sim can't tell them apart. Pick a different switch.` : null;
+      }
       const any = channelFromCaptures(off, on);
       if (any && sticks.includes(any.index)) {
         const fn = FUNCTIONS[sticks.indexOf(any.index)];
         return `That switch moved the ${fn.label.toLowerCase()} channel (ch ${any.index + 1}) instead of a channel of its own. In a helicopter model memory, flight-mode and hold switches change the throttle and pitch curves rather than sending their own channel, so the sim can't see them as switches.`;
       }
-      if (any) return `That switch moved ch ${any.index + 1}, which another switch already uses. Pick a different switch.`;
-      return "That switch didn't change any channel the dongle sends. On a DX6i only the channels 5 and 6 switches (GEAR, and FLAP/MIX in an ACRO model) come through on their own.";
+      return "That switch didn't change any channel the dongle sends. On a DX6i in an ACRO model, only GEAR (ch 5) and FLAP (ch 6) send channels, and FLAP only moves ch 6 if the radio's FLAPS menu gives its positions different values.";
     };
     const showProblem = (text, sw) => {
       wiz.replaceChildren(h("div", { class: "wiz-card" },
         h("p", { class: "wiz-step" }, sw.label),
         h("p", { class: "wiz-text" }, "Switch not found"),
         h("p", {}, text),
-        h("p", { class: "hint" }, "Fix: use an ACRO (airplane) model memory for the sim, and use the GEAR and FLAP/MIX switches. Or skip it and use the on-screen flight-mode buttons."),
+        h("p", { class: "hint" }, "Fix: use an ACRO (airplane) model memory for the sim with the GEAR and FLAP switches (see Transmitter \u2192 \u201cMore switches\u201d). Or skip it and use the on-screen flight-mode buttons."),
         h("div", { class: "row" },
           h("button", { type: "button", onclick: () => skipSwitch(sw) }, "Skip this switch"),
           h("button", { type: "button", class: "primary", onclick: () => { i = steps.findIndex((x) => x.sw === sw); render(); } }, "Try another switch"))));
@@ -363,8 +386,8 @@ export class UI {
       }
       for (const sw of SWITCHES) {
         if (caps[`sw-${sw.key}`] === "skip") continue;
-        const ch = channelFromCaptures(caps[`sw-${sw.key}-off`], caps[`sw-${sw.key}-on`], used);
-        if (ch) { used.push(ch.index); map.switches[sw.key] = { index: ch.index, off: ch.lo, on: ch.hi }; }
+        const ch = channelFromCaptures(caps[`sw-${sw.key}-off`], caps[`sw-${sw.key}-on`], used);  // only stick channels are off limits
+        if (ch) map.switches[sw.key] = { index: ch.index, off: ch.lo, on: ch.hi };
       }
       this.app.settings.input.map = map;
       this.changed("input");

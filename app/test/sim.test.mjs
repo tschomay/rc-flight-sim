@@ -191,3 +191,11 @@ test("self-levelling: centred stick levels the heli, held stick holds a tilt", a
   const right = rot(h.q, v3(0, 0, 1));
   assert.ok(right.y < 0, "right stick banks to the right");
 });
+
+test("trainer: zone is in, edge near the rim, out beyond it", () => {
+  const h = new Heli(MODELS.fbl450);
+  const tr = new Trainer({ ...DEFAULT_TRAINER, circle: 3 });
+  tr.start(h);
+  const at = (x) => { h.reset({ pos: v3(x, 2, -DEFAULT_TRAINER.distance), airborne: true }); tr.update(h, sticks(), DT); return tr.zone; };
+  assert.deepEqual([at(0), at(1.3), at(1.7)], ["in", "edge", "out"]);
+});

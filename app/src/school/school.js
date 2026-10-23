@@ -11,7 +11,8 @@ export const CREDIT = {
   title: "From tail-in to all 8s and funnels in 6 months",
   author: "ArchmageAU",
   where: "HeliFreak, RC Helicopter Flight School forum, 2013",
-  source: "https://www.helifreak.com/showthread.php?t=493289",  // the thread the guide summarises
+  source: "https://www.helifreak.com/showthread.php?t=531380",
+  origin: "https://www.helifreak.com/showthread.php?t=493289",  // "Just confirming I am on the right track", which the guide summarises
 };
 
 export const PIRO_RATE = 6;        // °/s: one rotation per minute
