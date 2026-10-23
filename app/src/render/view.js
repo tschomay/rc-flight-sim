@@ -73,6 +73,7 @@ export class CardboardView {
     this._q = new THREE.Quaternion();
     this.onOrient = (e) => { if (e.alpha != null) this.orient = { a: e.alpha, b: e.beta, g: e.gamma }; };
     this.tracked = new THREE.Vector3(0, 0.5, -5);
+    this.headTracking = true;  // off: stereo 3D that follows the heli, like the flat view
   }
 
   start() { addEventListener("deviceorientation", this.onOrient); this.needsCenter = true; }
@@ -109,7 +110,7 @@ export class CardboardView {
   }
 
   update(target, dt) {
-    const q = this.headQuaternion(this._q);
+    const q = this.headTracking ? this.headQuaternion(this._q) : null;
     if (q) {
       if (this.needsCenter) {
         const f = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
@@ -119,7 +120,7 @@ export class CardboardView {
       const yaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), this.yawOffset);
       this.head.quaternion.copy(yaw.multiply(q));
     } else {
-      // no sensors (desktop): follow the heli so the mode is still testable
+      // head tracking off, or no sensors (desktop): follow the heli
       this.tracked.lerp(target, Math.min(1, dt * 14));
       this.head.lookAt(this.tracked);
       this.head.rotateY(Math.PI);  // Object3D.lookAt points +z at the target; cameras look down -z

@@ -178,12 +178,29 @@ export class UI {
   }
 
   tab_heli(s) {
+    const preset = (label, rates, cyc, rud) => h("button", { type: "button", class: `preset ${s.rates === rates && s.expo.cyclic === cyc ? "on" : ""}`, onclick: () => {
+      s.rates = rates; s.expo.cyclic = cyc; s.expo.rudder = rud; this.changed("model"); this.openSheet("heli");
+    } }, label);
     return [
       seg("Helicopter", Object.entries(MODELS).map(([k, m]) => [k, m.name]), s.model, (v) => { s.model = v; this.changed("model"); }),
       h("p", { class: "hint" }, MODELS[s.model].blurb),
-      slider("Rates", 40, 130, 5, s.rates, (v) => { s.rates = v; this.changed("model"); }, (v) => `${v}%`),
+      h("fieldset", { class: "field" }, h("legend", {}, "Stick feel"),
+        h("div", { class: "presets" },
+          preset("Gentle: 50% rates, 45% expo", 50, 45, 40),
+          preset("Sport: 75%, 30%", 75, 30, 30),
+          preset("3D: 100%, 20%", 100, 20, 20))),
+      slider("Rates", 30, 130, 5, s.rates, (v) => { s.rates = v; this.changed("model"); }, (v) => `${v}%`),
       slider("Cyclic expo", 0, 80, 5, s.expo.cyclic, (v) => { s.expo.cyclic = v; this.changed("expo"); }, (v) => `${v}%`),
       slider("Rudder expo", 0, 80, 5, s.expo.rudder, (v) => { s.expo.rudder = v; this.changed("expo"); }, (v) => `${v}%`),
+      toggle("Self-levelling (stability mode)", s.selfLevel, (v) => { s.selfLevel = v; this.changed("misc"); }, "the stick sets a tilt and letting go levels the heli, like Blade SAFE. Upright only; off for real 3D practice"),
+      h("details", {}, h("summary", {}, "Feels twitchy? Every input over-corrects?"),
+        h("ol", {},
+          h("li", {}, "Make sure the transmitter isn't adding its own expo or dual rates on top of the sim's: in the radio, D/R 100% and expo 0 for the sim model. Two layers of curves make the centre feel odd and the ends jumpy."),
+          h("li", {}, "Start with the Gentle preset. Rates are how fast the heli rolls at full stick; lower rates make small inputs smaller. Raise them as you get steadier."),
+          h("li", {}, "Expo softens the centre of the stick, where all hover corrections live. 30–50% is normal for hovering."),
+          h("li", {}, "Use small, brief inputs and let go: this is a flybarless heli, so it holds whatever tilt you leave it at. Correct, then centre the stick."),
+          h("li", {}, "Slow the sim down (Training → Sim speed). Learning at 60–70% and working up is exactly what the flight school does."),
+          h("li", {}, "Turn on self-levelling for a few sessions if you just want to get a feel for it."))),
       toggle("Reset automatically after a crash", s.autoReset, (v) => { s.autoReset = v; this.changed("misc"); }),
       h("p", { class: "hint" }, "Flight modes: Normal uses lower headspeed and −4…+12° pitch. Idle up uses full headspeed and symmetric −12…+12° for inverted. Hold cuts the motor for autorotation."),
     ];
@@ -218,7 +235,16 @@ export class UI {
           h("li", {}, "Make a new model memory and set it to ACRO (airplane) type, so the radio sends raw sticks."),
           h("li", {}, "Dual rates 100%, expo 0, no mixes, all trims centred. The sim does curves, expo and flight modes."),
           h("li", {}, "Bind the radio to the WS2000 (hold the dongle's button while plugging it in, then bind as usual)."),
-          h("li", {}, "Pick two switches (for example GEAR and FLAP/MIX) for idle-up and throttle hold in the wizard."))),
+          h("li", {}, "Pick two switches (GEAR and FLAP/MIX) for idle-up and throttle hold in the wizard."))),
+      h("details", {}, h("summary", {}, "Heli model memory vs ACRO: what's the difference?"),
+        h("p", { class: "hint" }, "A heli model memory works, but the radio shapes the sticks before the sim sees them:"),
+        h("ol", {},
+          h("li", {}, "Flight mode (F MODE) and throttle hold don't get channels of their own. They switch the throttle and pitch curves, so the sim can't see them as switches. That is why your switches didn't show up."),
+          h("li", {}, "The collective comes through the pitch curve, so its range and centre depend on the flight mode you're in. If the wizard picked the throttle channel instead, idle up turns it into a V-shaped curve."),
+          h("li", {}, "The radio's dual rates and expo stack with the sim's, which can make the sticks feel twitchy or uneven."),
+          h("li", {}, "If the swash type is CCPM (120°) rather than 1-servo, aileron, elevator and pitch are mixed together and the sticks won't separate cleanly."),
+          h("li", {}, "The gyro gain is usually on the GEAR channel, which then can't be a switch.")),
+        h("p", { class: "hint" }, "In ACRO, channels 1–4 are the raw sticks and channels 5–6 are the GEAR and FLAP/MIX switches. That gives the sim clean, linear sticks and two real switches, and the sim does the heli part (curves, idle up, hold) itself, like HELI-X. Keep your heli model for the real heli and use a separate ACRO memory for the sim.")),
       h("p", { class: "hint" }, "Keyboard (desktop): W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, R reset."),
     ];
   }
@@ -230,6 +256,7 @@ export class UI {
       slider("Field of view", 20, 60, 1, s.view.fov, (v) => { s.view.fov = v; this.changed("view"); }, (v) => `${v}°`),
       toggle("Auto-zoom", s.view.autoZoom, (v) => { s.view.autoZoom = v; this.changed("view"); }, "narrows the view as the heli gets farther away"),
       seg("VR", [["auto", "WebXR if available"], ["cardboard", "Built-in Cardboard"]], s.view.vrMode, (v) => { s.view.vrMode = v; this.changed("view"); }),
+      toggle("Head tracking in Cardboard", s.view.headTracking, (v) => { s.view.headTracking = v; this.changed("view"); }, "off: 3D stereo that keeps the heli in view for you, no head movement needed"),
       h("details", {}, h("summary", {}, "Cardboard lens"),
         slider("Distortion k1", 0, 0.6, 0.01, lens.k1, setL("k1"), (v) => (+v).toFixed(2)),
         slider("Distortion k2", 0, 0.6, 0.01, lens.k2, setL("k2"), (v) => (+v).toFixed(2)),
@@ -270,6 +297,39 @@ export class UI {
           optional ? h("button", { type: "button", onclick: () => skipSwitch(st.sw) }, "No switch for this") : null,
           h("button", { type: "button", class: "primary", onclick: next }, "Next"))));
     };
+    // Which channels the sticks are on, from the captures so far.
+    const stickChannels = () => {
+      const used = [];
+      for (const f of FUNCTIONS) {
+        const ch = caps[`${f.key}-lo`] && channelFromCaptures(caps[`${f.key}-lo`], caps[`${f.key}-hi`], used);
+        if (ch) used.push(ch.index);
+      }
+      return used;
+    };
+    const switchProblem = (c, sw) => {
+      const off = c[`sw-${sw.key}-off`], on = c[`sw-${sw.key}-on`];
+      const sticks = stickChannels();
+      const others = SWITCHES.filter((o) => o !== sw && c[`sw-${o.key}`] !== "skip" && c[`sw-${o.key}-on`]).map((o) => channelFromCaptures(c[`sw-${o.key}-off`], c[`sw-${o.key}-on`], sticks)?.index);
+      const free = channelFromCaptures(off, on, [...sticks, ...others.filter((x) => x != null)]);
+      if (free) return null;
+      const any = channelFromCaptures(off, on);
+      if (any && sticks.includes(any.index)) {
+        const fn = FUNCTIONS[sticks.indexOf(any.index)];
+        return `That switch moved the ${fn.label.toLowerCase()} channel (ch ${any.index + 1}) instead of a channel of its own. In a helicopter model memory, flight-mode and hold switches change the throttle and pitch curves rather than sending their own channel, so the sim can't see them as switches.`;
+      }
+      if (any) return `That switch moved ch ${any.index + 1}, which another switch already uses. Pick a different switch.`;
+      return "That switch didn't change any channel the dongle sends. On a DX6i only the channels 5 and 6 switches (GEAR, and FLAP/MIX in an ACRO model) come through on their own.";
+    };
+    const showProblem = (text, sw) => {
+      wiz.replaceChildren(h("div", { class: "wiz-card" },
+        h("p", { class: "wiz-step" }, sw.label),
+        h("p", { class: "wiz-text" }, "Switch not found"),
+        h("p", {}, text),
+        h("p", { class: "hint" }, "Fix: use an ACRO (airplane) model memory for the sim, and use the GEAR and FLAP/MIX switches. Or skip it and use the on-screen flight-mode buttons."),
+        h("div", { class: "row" },
+          h("button", { type: "button", onclick: () => skipSwitch(sw) }, "Skip this switch"),
+          h("button", { type: "button", class: "primary", onclick: () => { i = steps.findIndex((x) => x.sw === sw); render(); } }, "Try another switch"))));
+    };
     const skipSwitch = (sw) => {
       caps[`sw-${sw.key}`] = "skip";
       while (steps[i] && steps[i].sw === sw) i++;
@@ -284,6 +344,10 @@ export class UI {
       if (st.kind === "stick") caps[`${st.f.key}-${st.end}`] = snap;
       if (st.kind === "center") caps.center = snap;
       if (st.kind === "switch") caps[`sw-${st.sw.key}-${st.end}`] = snap;
+      if (st.kind === "switch" && st.end === "on") {
+        const problem = switchProblem(caps, st.sw);
+        if (problem) { showProblem(problem, st.sw); return; }
+      }
       i++;
       i < steps.length ? render() : finish();
     };

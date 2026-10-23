@@ -11,10 +11,11 @@ export const DEFAULTS = {
   model: DEFAULT_MODEL,
   trainer: DEFAULT_TRAINER,
   expo: { cyclic: 30, rudder: 30 },   // %
-  rates: 100,                         // % of the model's rates
+  rates: 75,                          // % of the model's rates
+  selfLevel: false,                   // stick sets tilt angle and centring levels (stability mode)
   mode: "idle",                       // flight mode when no transmitter switch is mapped
   input: { touch: "auto", map: null },
-  view: { fov: 34, autoZoom: true, vrMode: "auto", lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
+  view: { fov: 34, autoZoom: true, vrMode: "auto", headTracking: true, lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
   wind: { speed: 0, from: 0, gust: 0.3 },
   autoReset: true,
   school: DEFAULT_SCHOOL,

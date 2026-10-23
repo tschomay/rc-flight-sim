@@ -5,7 +5,7 @@
 // on a buddy box: nothing is pinned in place, so wind and the heli's own dynamics still
 // show. Heading can be held, rotated continuously either way, or swung ±90°.
 
-import { v3, sub, cross, clamp, wrapPi, DEG, irot } from "./math.js";
+import { v3, sub, cross, clamp, wrapPi, DEG, irot, rot, norm } from "./math.js";
 import { G } from "./heli.js";
 
 export const ORIENTATIONS = {
@@ -134,4 +134,26 @@ export class Trainer {
     else this.streak = 0;
     return out;
   }
+}
+
+/**
+ * Self-levelling ("stability mode", like Blade SAFE or a FBL rescue-assisted mode): the
+ * cyclic stick sets a tilt angle instead of a roll/pitch rate, and centring the stick
+ * levels the heli. Only acts while upright; inverted, the pilot's rate commands pass
+ * through so flips still work. Returns new sticks.
+ */
+export function selfLevel(heli, pilot, maxTilt = 30) {
+  const up = heli.up;
+  if (up.y <= 0.2) return pilot;
+  const fwd = rot(heli.q, v3(1, 0, 0)), right = rot(heli.q, v3(0, 0, 1));
+  const f = norm(v3(fwd.x, 0, fwd.z)), r = norm(v3(right.x, 0, right.z));
+  const tp = Math.tan(pilot.pitch * maxTilt * DEG), tr = Math.tan(pilot.roll * maxTilt * DEG);
+  const want = norm(v3(f.x * tp + r.x * tr, 1, f.z * tp + r.z * tr));
+  const errB = irot(heli.q, cross(up, want));
+  const k = 8;
+  return {
+    ...pilot,
+    roll: clamp((k * errB.x) / (heli.def.rates.roll * DEG), -1, 1),
+    pitch: clamp((-k * errB.z) / (heli.def.rates.pitch * DEG), -1, 1),
+  };
 }

@@ -6,7 +6,7 @@ import { Heli } from "../src/sim/heli.js";
 import { MODELS } from "../src/sim/models.js";
 import { Trainer, DEFAULT_TRAINER } from "../src/sim/trainer.js";
 import { Wind } from "../src/sim/wind.js";
-import { v3, DEG, wrapPi } from "../src/sim/math.js";
+import { v3, DEG, wrapPi, rot } from "../src/sim/math.js";
 
 const DT = 0.001;
 const calm = { wind: v3() };
@@ -175,4 +175,19 @@ test("trainer: leaving the circle can count as a crash", () => {
   h.reset({ pos: v3(2, 1.5, -DEFAULT_TRAINER.distance), airborne: true });
   tr.update(h, sticks(), DT);
   assert.equal(h.crashed, "Left the circle");
+});
+
+test("self-levelling: centred stick levels the heli, held stick holds a tilt", async () => {
+  const { selfLevel } = await import("../src/sim/trainer.js");
+  const { qaxis } = await import("../src/sim/math.js");
+  const h = airborne("fbl450");
+  h.q = qaxis(v3(1, 0, 0), 25 * DEG);  // banked 25°
+  const c = hoverStick("fbl450");
+  run(h, (t, hh) => selfLevel(hh, sticks({ coll: c })), 1.5);
+  assert.ok(h.up.y > Math.cos(3 * DEG), `tilt after 1.5 s ${(Math.acos(h.up.y) / DEG).toFixed(1)}°`);
+  run(h, (t, hh) => selfLevel(hh, sticks({ coll: c, roll: 0.5 })), 1.5);
+  const tilt = Math.acos(h.up.y) / DEG;
+  assert.ok(tilt > 11 && tilt < 19, `held tilt ${tilt.toFixed(1)}° (want ~15°)`);
+  const right = rot(h.q, v3(0, 0, 1));
+  assert.ok(right.y < 0, "right stick banks to the right");
 });

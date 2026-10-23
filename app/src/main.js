@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { Heli } from "./sim/heli.js";
 import { MODELS } from "./sim/models.js";
-import { Trainer } from "./sim/trainer.js";
+import { Trainer, selfLevel } from "./sim/trainer.js";
 import { Wind } from "./sim/wind.js";
 import { buildWorld } from "./render/world.js";
 import { HeliMesh } from "./render/heliMesh.js";
@@ -101,6 +101,7 @@ class App {
     this.trainer.cfg = structuredClone(s.trainer);
     this.wind.set(s.wind);
     this.cardboard.setLens(s.view.lens);
+    this.cardboard.headTracking = s.view.headTracking;
     this.world.setTarget(s.trainer, s.trainer.kind === "hover");
   }
 
@@ -217,7 +218,8 @@ class App {
       let n = 0;
       while (this.acc >= DT && n < 60) {
         const wind = this.wind.step(DT);
-        const ctl = this.trainer.update(this.heli, sticks, DT);
+        const pilot = this.settings.selfLevel ? selfLevel(this.heli, sticks) : sticks;
+        const ctl = this.trainer.update(this.heli, pilot, DT);
         this.heli.step(ctl, { wind }, DT);
         this.acc -= DT; n++;
       }
@@ -280,7 +282,7 @@ class App {
     try { this.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
     this.cardboard.start();
     this.resize();
-    this.ui.toast("Tap once to centre the view, twice to reset", 3000);
+    this.ui.toast(this.settings.view.headTracking ? "Tap once to centre the view, twice to reset" : "Tap twice to reset", 3000);
   }
 
   exitVR() {
