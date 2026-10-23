@@ -61,6 +61,7 @@ export function parseCSV(text) {
     head.forEach((k, i) => { if (r[i] !== undefined && r[i] !== "") e[k] = r[i]; });
     for (const k of NUM) if (k in e) e[k] = +e[k];
     for (const k of BOOL) if (k in e) e[k] = e[k] === "true";
+    if (e.tally) { try { e.tally = JSON.parse(e.tally); } catch { delete e.tally; } }
     e.type ||= "session";
     if (e.notes == null) e.notes = "";
     return e;

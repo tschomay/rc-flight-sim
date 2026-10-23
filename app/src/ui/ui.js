@@ -2,6 +2,7 @@
 // transmitter setup wizard. Plain DOM, no framework; the sheet is rebuilt on open.
 
 import { MODELS } from "../sim/models.js";
+import { COMPASS, lessonProgress } from "../sim/exercises.js";
 import { ORIENTATIONS } from "../sim/trainer.js";
 import { schoolTab, sessionEndCard, schoolChip } from "./school.js";
 import { FUNCTIONS, SWITCHES, snapshot, firstGamepad, channelFromCaptures, readMapped } from "../input/gamepad.js";
@@ -113,7 +114,16 @@ export class UI {
     const score = tr ? h("div", { class: `score ${trainer.zone}` },
       h("b", {}, { in: "In circle", edge: "Near the edge", out: "Outside" }[trainer.zone]),
       ` ${trainer.streak.toFixed(1)} s · best ${trainer.best.toFixed(1)} s · ${pct}% of ${Math.round(trainer.timeTotal)} s`) : null;
-    this.el.hud.replaceChildren(h("div", { class: "chips" }, rows), score);
+    let ex = null;
+    if (trainer.cfg.pattern?.kind !== "none" || (tr && trainer.cfg.compass)) {
+      const sc = trainer.exercise;
+      const lesson = this.app.session?.plan.lesson;
+      const prog = lesson ? lessonProgress(lesson, sc.tally()) : null;
+      const next = sc.nextPoint;
+      const text = prog?.text || sc.summary() || (trainer.cfg.compass ? "Stop for 1 s at each compass point" : "Fly the outline: laps count automatically");
+      ex = h("div", { class: `score ex ${prog?.passed ? "in" : ""}` }, text, trainer.cfg.compass && next != null ? h("b", {}, ` \u2192 ${COMPASS[next]}`) : null);
+    }
+    this.el.hud.replaceChildren(...[h("div", { class: "chips" }, rows), score, ex].filter(Boolean));
   }
 
   // ---------- settings sheet ----------
@@ -174,6 +184,11 @@ export class UI {
       slider("Swing period", 4, 20, 1, t.swingPeriod, set("swingPeriod"), (v) => `${v} s`),
       slider("Height", 0.5, 5, 0.1, t.height, set("height"), fmt1("m")),
       seg("Circle diameter", [[1, "1 m"], [2, "2 m"], [3, "3 m"], [4, "4 m"]].map(([v, l]) => [v, l]), t.circle, (v) => { t.circle = +v; this.changed("trainer"); }),
+      h("fieldset", { class: "field" }, h("legend", {}, "Ground pattern (scored automatically)"),
+        seg("Outline", [["none", "None"], ["circle", "Circle"], ["eight", "Figure 8"]], t.pattern?.kind || "none", (v) => { t.pattern = { ...t.pattern, kind: v }; this.changed("trainer"); }),
+        slider("Circle radius", 3, 10, 0.5, t.pattern?.radius ?? 5, (v) => { t.pattern = { ...t.pattern, radius: v }; this.changed("trainer"); }, fmt1("m")),
+        slider("Pattern distance", 8, 30, 1, t.pattern?.distance ?? 16, (v) => { t.pattern = { ...t.pattern, distance: v }; this.changed("trainer"); }, fmt1("m")),
+        toggle("Compass points on the hover circle", t.compass, (v) => { t.compass = v; this.changed("trainer"); }, "scores 8-point piros: stop 1 s at each point in turn")),
       seg("Counts as inside", [[0, "Any height"], [1, "±1 m"], [2, "±2 m"]], t.heightWindow ?? 0, (v) => { t.heightWindow = +v; this.changed("trainer"); }),
       toggle("Show the column above the circle", s.view.column, (v) => { s.view.column = v; this.changed("trainer"); }, "the ring on the ground always shows"),
       toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "like HELI-X: wander out and the heli resets"),

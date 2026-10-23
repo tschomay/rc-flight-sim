@@ -24,11 +24,13 @@ Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, 
 - **Flight model:** 1 kHz, blade-element rotor with dynamic inflow, ground effect, vortex ring, flapping, governor, autorotation, FBL rate control with heading-hold tail. See [docs/physics.md](docs/physics.md).
 - **Hover trainer:** pick which of collective, cyclic or rudder the trainer flies. Set the height, circle size (1–4 m), which side faces you, upright or inverted, heading hold, rotate left or right at a set speed, or ±90° swing. Scores time in the circle (a column at any height, or a ±1/±2 m window); leaving it can count as a crash, like HELI-X. One-tap presets: rotating hover, inverted hover, inverted rotating, nose-in.
 - **Flight school (optional):** ArchmageAU's guide ["From tail-in to all 8s and funnels in 6 months"](https://www.helifreak.com/showthread.php?t=531380) (HeliFreak, 2013), built in with credit. Lessons 1–12, timed sessions, automatic crash counting, and the guide's log and session rules (speed up/down, alternate direction, hand over the collective, advance). The log is editable, the next session can be overridden, and the log exports as CSV.
+- **Automatic scoring:** ground outlines (circle or figure 8) count laps and 8s, labelled upright/inverted and forward/backward/nose-in/tail-in, so lessons 6–11a are scored and "passed" is suggested when the goal is met. Compass points on the hover circle score 8-point piros (lesson 5a).
+- **Backup:** import/export CSV or full JSON, and optional automatic backup to your own Vercel Blob store (the read-write token is the password; see Flight school → Backup).
 - **Sim speed:** 20–100%, as the guide asks for.
 - **Stick feel:** Gentle/Sport/3D rate and expo presets, optional self-levelling (stability) mode.
 - **Inputs:** transmitter via the Gamepad API with a setup wizard (finds each stick and switch, any channel order or direction), on-screen mode 2 sticks, keyboard.
 - **Flight modes:** Normal, Idle up (symmetric ±12° for inverted), Hold. Set from TX switches or on-screen buttons.
-- **Views:** flat, which follows the heli with auto-zoom; Cardboard stereo with lens correction and head tracking (or without, following the heli); WebXR when the phone offers it.
+- **Views:** flat, which follows the heli with auto-zoom; Cardboard stereo with lens correction and head tracking (or without, following the heli); side-by-side without lens correction; red/cyan anaglyph; WebXR when the phone offers it.
 - **Wind:** speed, direction, gusts. A windsock shows it.
 
 ## Docs
@@ -48,4 +50,4 @@ Use an ACRO (airplane) model memory for the sim: channels 1–4 come through as 
 
 1. Fly the flight school on the phone with the DX6i in an ACRO memory; check the session rules feel right.
 2. Tune feel against the real heli in `app/src/sim/models.js` (see docs/physics.md "Model parameters"), and re-run `npm test`.
-3. Ideas: compass markers for 8-point piros, circle/8 path guides for lessons 6–12, sound, a lighter phone render mode.
+3. Ideas: sound, crash replay, a lighter phone render mode, scoring for lesson 12's full sequence.

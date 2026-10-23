@@ -4,6 +4,7 @@
 
 import { h, seg, toggle, slider } from "./ui.js";
 import { CREDIT, LESSONS, lessonById, planNext, restLeft, dailyStatus, toCSV, nextLessonId } from "../school/school.js";
+import { lessonProgress } from "../sim/exercises.js";
 import { entryKey, exportJSON, parseImport, mergeLogs, looksLikeToken } from "../school/backup.js";
 
 const DIRS = [["ccw", "CCW"], ["cw", "CW"], ["both", "Both"]];
@@ -123,18 +124,19 @@ function logRow(ui, sc, e, i) {
 }
 
 /** Edit (or add, when index is null) a log entry in the overlay card. */
-export function editEntry(ui, entry, index, { title = index == null ? "Add log entry" : "Edit log entry", onDone } = {}) {
+export function editEntry(ui, entry, index, { title = index == null ? "Add log entry" : "Edit log entry", onDone, passed: passedGuess = false, progress = null } = {}) {
   const sc = ui.app.settings.school;
   const e = structuredClone(entry);
   const wiz = ui.el.wizard;
   const hoverLesson = () => lessonById(e.lesson).kind === "hover";
-  let passed = false;
+  let passed = passedGuess;
   const num = (label, k, step = 1) => h("label", { class: "field" }, h("span", { class: "lbl" }, label),
     h("input", { type: "number", min: 0, step, value: e[k], oninput: (ev) => { e[k] = +ev.target.value; } }));
   const render = () => {
     const hover = hoverLesson();
     wiz.replaceChildren(h("div", { class: "wiz-card" },
       h("p", { class: "wiz-text" }, title),
+      progress ? h("p", { class: `callout ${progress.passed ? "" : "warn"}` }, progress.passed ? `Goal met: ${progress.text}` : `Counted: ${progress.text}`) : null,
       h("label", { class: "field" }, h("span", { class: "lbl" }, "Lesson"),
         h("select", { onchange: (ev) => { e.lesson = ev.target.value; render(); } }, LESSONS.map((l) => h("option", { value: l.id, selected: l.id === e.lesson }, `${l.id}. ${l.title}`)))),
       h("label", { class: "field" }, h("span", { class: "lbl" }, "Date and time"),
@@ -198,7 +200,10 @@ function download(name, text, type) {
 /** After a session: confirm or edit the automatic log entry, then show what's next. */
 export function sessionEndCard(ui, entry) {
   ui.app.paused = true;
+  const progress = lessonProgress(entry.lesson, entry.tally);
   editEntry(ui, entry, null, {
+    progress,
+    passed: !!progress?.passed && lessonById(entry.lesson).kind !== "hover",
     title: `Session done: ${entry.minutes} min, ${entry.crashes} crash${entry.crashes === 1 ? "" : "es"}. Check the log entry.`,
     onDone: (saved) => {
       ui.openSheet("school");

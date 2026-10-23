@@ -111,6 +111,8 @@ class App {
     this.cardboard.setLens(s.view.stereo === "plain" ? { ...s.view.lens, k1: 0, k2: 0, zoom: 1, fov: 55 } : s.view.lens);
     this.cardboard.headTracking = s.view.headTracking;
     this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
+    this.world.setPattern(s.trainer.pattern);
+    this.world.setCompass(s.trainer, s.trainer.kind === "hover" && s.trainer.compass);
   }
 
   saveAndApply(what) {
@@ -204,6 +206,8 @@ class App {
     // log what was actually flown, in case settings were changed mid-session
     entry.speed = s.timeScale;
     if (ss.plan.kind === "hover") { entry.collAssist = s.trainer.assist.collective; entry.rudderAssist = s.trainer.assist.rudder; }
+    const ex = this.trainer.exercise;
+    if (s.trainer.pattern?.kind !== "none" || s.trainer.compass) { entry.tally = ex.tally(); entry.notes = ex.summary(); }
     s.trainer = ss.prev.trainer;
     s.timeScale = ss.prev.timeScale;
     saveSettings(s);
@@ -296,6 +300,7 @@ class App {
     this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
     this.world.update(hp, this.wind.current);
     this.world.setZone(this.trainer.zone);
+    if (this.trainer.cfg.compass) this.world.highlightCompass(this.trainer.exercise.nextPoint);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {

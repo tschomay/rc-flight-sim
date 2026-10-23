@@ -3,6 +3,7 @@
 // Everything is procedural so the app works offline and stays small.
 
 import * as THREE from "three";
+import { COMPASS, DEFAULT_PATTERN } from "../sim/exercises.js";
 
 function canvasTexture(size, draw, { repeat = 1, srgb = true } = {}) {
   const c = document.createElement("canvas");
@@ -248,8 +249,53 @@ export function buildWorld(scene) {
   targetGroup.add(groundRing, airRing, column);
   scene.add(targetGroup);
 
+  // pattern outlines (circle / figure-8) and the hover circle's compass points
+  const patternGroup = new THREE.Group();
+  scene.add(patternGroup);
+  const lineMat = decal(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false }), 2);
+  const bandMat = decal(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false }), 1);
+  const flat = (mesh, y = 0.02) => { mesh.rotation.x = -Math.PI / 2; mesh.position.y = y; return mesh; };
+
+  const compassGroup = new THREE.Group();
+  scene.add(compassGroup);
+  const letters = COMPASS.map((name, k) => {
+    const tex = canvasTexture(128, (g, n) => {
+      g.clearRect(0, 0, n, n);
+      g.fillStyle = "#fff"; g.font = `bold ${name.length > 1 ? 64 : 90}px sans-serif`; g.textAlign = "center"; g.textBaseline = "middle";
+      g.fillText(name, n / 2, n / 2 + 4);
+    });
+    const mat = decal(new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, color: 0xffffff }), 3);
+    const m = flat(new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.6), mat), 0.025);
+    const a = (90 - 45 * k) * Math.PI / 180;  // N is away from the pilot (−z), E to the right
+    m.userData.dir = new THREE.Vector2(Math.cos(a), -Math.sin(a));
+    compassGroup.add(m);
+    return m;
+  });
+
   return {
     sun,
+    setPattern(p = DEFAULT_PATTERN) {
+      patternGroup.clear();
+      if (!p || p.kind === "none") return;
+      const R = p.radius, b = p.band ?? 2.5;
+      const centers = p.kind === "eight" ? [-R, R] : [0];
+      for (const x of centers) {
+        const line = flat(new THREE.Mesh(new THREE.RingGeometry(R - 0.06, R + 0.06, 160), lineMat));
+        const band = flat(new THREE.Mesh(new THREE.RingGeometry(Math.max(0.1, R - b), R + b, 160), bandMat), 0.015);
+        line.position.x = band.position.x = x;
+        line.position.z = band.position.z = -p.distance;
+        patternGroup.add(band, line);
+      }
+    },
+    setCompass(cfg, visible) {
+      compassGroup.visible = visible;
+      const r = cfg.circle / 2 + 0.55;
+      for (const m of letters) m.position.set(m.userData.dir.x * r, 0.025, -cfg.distance + m.userData.dir.y * r);
+    },
+    /** Light up the compass point to stop at next (or none). */
+    highlightCompass(k) {
+      letters.forEach((m, i) => m.material.color.setHex(i === k ? 0x4be37a : 0xffffff));
+    },
     setTarget(cfg, visible, showColumn = true) {
       targetGroup.visible = visible;
       column.visible = showColumn;
