@@ -89,3 +89,17 @@ test("rest timer counts from the end of the last session", () => {
   assert.equal(restLeft(s, 20 * 60000), 10);
   assert.equal(restLeft(s, 31 * 60000), 0);
 });
+
+test("backup: merging keeps both sides, newest edit wins, deletions stick", async () => {
+  const { mergeLogs, parseImport, toCSV } = await import("../src/school/backup.js");
+  const a = { log: [{ id: "s1", type: "session", date: "2026-01-01T08:00:00Z", crashes: 3 }, { id: "s2", type: "session", date: "2026-01-02T08:00:00Z", crashes: 1 }], deleted: [] };
+  const b = { log: [{ id: "s1", type: "session", date: "2026-01-01T08:00:00Z", crashes: 2, editedAt: "2026-01-05T00:00:00Z" }, { id: "s3", type: "session", date: "2026-01-03T08:00:00Z", crashes: 0 }], deleted: ["s2"] };
+  const m = mergeLogs(a, b);
+  assert.deepEqual(m.log.map((e) => [e.id, e.crashes]), [["s1", 2], ["s3", 0]]);
+  assert.deepEqual(m.deleted, ["s2"]);
+  // CSV round trip, including commas, quotes and newlines in notes
+  const log = [{ type: "session", id: "s9", date: "2026-01-04T08:00:00.000Z", minutes: 15, lesson: "4", orientation: "inverted", direction: "cw", speed: 85, crashes: 12, outOfArea: 3, collAssist: true, rudderAssist: true, notes: 'wind, gusty\n"hard"' }];
+  const back = parseImport(toCSV(log)).log;
+  assert.deepEqual(back, log);
+  assert.equal(mergeLogs({ log, deleted: [] }, { log: back, deleted: [] }).log.length, 1, "re-importing your own export doesn't double it");
+});

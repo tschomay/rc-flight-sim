@@ -21,6 +21,7 @@ export const DEFAULTS = {
   wind: { speed: 0, from: 0, gust: 0.3 },
   autoReset: true,
   school: DEFAULT_SCHOOL,
+  backup: { token: "", auto: true, lastAt: null, lastError: null },
   timeScale: 100,                     // % of real time the sim runs at
 };
 

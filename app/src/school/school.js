@@ -83,7 +83,8 @@ export const DEFAULT_SCHOOL = {
   sessionMinutes: 15,
   restMinutes: 15,
   circle: 3,
-  log: [],         // entries, oldest first (see recordEntry)
+  log: [],         // entries, oldest first (see sessionEntry)
+  deleted: [],     // keys of deleted entries, so a deletion survives merging with a backup
   override: null,  // { lesson?, orientation?, direction?, speed?, collAssist? } for the next session only
 };
 
@@ -220,7 +221,7 @@ export function dailyStatus(school, now = new Date()) {
 }
 
 export function toCSV(log) {
-  const cols = ["type", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "collAssist", "rudderAssist", "notes"];
+  const cols = ["type", "id", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "collAssist", "rudderAssist", "notes"];
   const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   return [cols.join(","), ...log.map((e) => cols.map((c) => q(e[c])).join(","))].join("\n");
 }
