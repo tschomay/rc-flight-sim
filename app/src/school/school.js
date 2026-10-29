@@ -1,6 +1,8 @@
 // Flight school: ArchmageAU's "From tail-in to all 8s and funnels in 6 months" (HeliFreak,
 // 2013), built in as an optional course. Lesson text here is a short paraphrase; the
 // pilot is pointed to the original for the full guide.
+// A saved copy of the guide is in docs/ ("From tail-in to all 8s and funnels in 6 months -
+// HeliFreak.pdf").
 //
 // The course state is never stored directly: it is replayed from the log every time, so
 // editing or deleting an entry re-derives where the pilot is and what comes next. A
