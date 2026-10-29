@@ -2,7 +2,7 @@
 // Every value the course suggests can be changed: the next session through an override,
 // past sessions by editing the log (the plan re-derives from it), the lesson by a jump.
 
-import { h, seg, toggle, slider } from "./ui.js";
+import { h, seg, toggle, slider, radii } from "./ui.js";
 import { CREDIT, LESSONS, lessonById, planNext, restLeft, dailyStatus, toCSV, nextLessonId } from "../school/school.js";
 import { lessonProgress } from "../sim/exercises.js";
 import { entryKey, exportJSON, parseImport, mergeLogs, looksLikeToken } from "../school/backup.js";
@@ -98,8 +98,8 @@ export function schoolTab(ui, s) {
   out.push(h("details", {}, h("summary", {}, "Course settings"),
     slider("Session length", 5, 20, 1, sc.sessionMinutes, (v) => { sc.sessionMinutes = v; save(); }, (v) => `${v} min`),
     slider("Rest between sessions", 0, 30, 1, sc.restMinutes, (v) => { sc.restMinutes = v; save(); }, (v) => `${v} min`),
-    seg("Hover area", [[2, "2 m"], [3, "3 m"], [4, "4 m"]], sc.circle, (v) => { sc.circle = +v; save(); }),
-    h("p", { class: "hint" }, "In hover lessons, leaving the area counts as a crash and resets the heli, as in HELI-X."),
+    seg("Hover area radius", radii([1, 1.5, 2, 3, 4]), sc.circle, (v) => { sc.circle = +v; save(); }),
+    h("p", { class: "hint" }, "In hover lessons, leaving the area counts as a crash and resets the heli. The guide doesn't give a size: start large and shrink it as you get steadier."),
     h("button", { type: "button", onclick: () => { if (confirm("Delete the whole log and start the course again?")) { sc.deleted = [...(sc.deleted || []), ...sc.log.map(entryKey)]; sc.log = []; sc.override = null; save(); reopen(); } } }, "Start the course over")));
   return out;
 }

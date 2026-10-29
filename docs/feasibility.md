@@ -2,7 +2,7 @@
 
 _2026-10-21 · status: exploring_
 
-**Question:** Can we build an RC helicopter training sim, in the spirit of [HELI-X](https://www.heli-x.info/cms/), that runs on an Android phone, has a flat-screen mode and a Cardboard VR mode, is flown with the owner's real Spektrum DX6i through a wireless USB sim dongle, and flies and looks close enough to the real thing to be useful training?
+**Question:** Can we build an RC helicopter training sim, that runs on an Android phone, has a flat-screen mode and a Cardboard VR mode, is flown with the owner's real Spektrum DX6i through a wireless USB sim dongle, and flies and looks close enough to the real thing to be useful training?
 
 **Short answer: yes, with one hardware question to settle first.** Every piece has been done before on phones or in browsers. The one real unknown is whether Chrome on Android exposes the dongle through the Gamepad API (the native-app route almost certainly works either way). The [Transmitter Probe](../spikes/input-probe/index.html) spike answers it in five minutes on the actual phone.
 
@@ -17,7 +17,7 @@ _2026-10-21 · status: exploring_
 | R5 | One or two helicopters (planes optional) | ✅ Scope fits. |
 | R6 | Physics realistic enough to feel like the real heli | ✅ Feasible. Needs careful tuning, not new science. |
 | R7 | Graphics that read as a real heli at a real field | ✅ Feasible. Photo-panorama scenery is the trick. |
-| R8 | HELI-X-style training: fixed-height hover, target circle, auto-rotating heading | ✅ Straightforward once the physics exists. |
+| R8 | Hover training: fixed-height hover, target circle, auto-rotating heading | ✅ Straightforward once the physics exists. |
 
 ## 1. Transmitter input (the critical path)
 
@@ -29,7 +29,7 @@ _2026-10-21 · status: exploring_
 - **Web (Chrome on Android):** Chrome's Gamepad API on Android sits on the same `InputDevice` layer, so it should see the dongle, but we found no first-hand report of an RC dongle in Chrome on Android. Risks: Chrome may drop or reorder some axes, and the DX6i's 6 channels may not all come through. **This is what the probe tests.**
 - **Latency:** DSM2 frames are 22 ms (11 ms in DSMX), plus USB polling (~1–8 ms) and one display frame (~16 ms). Total ~40–50 ms is comparable to PC sims with the same dongle. Fine for training.
 - **Radio setup:** The DX6i in heli mode applies its own pitch/throttle curves, swashplate mix and gyro channel before transmitting. Two choices:
-  1. Use a dedicated **ACRO (airplane) model memory** with everything linear, and do curves, expo and modes in the sim (what HELI-X recommends; clean and predictable).
+  1. Use a dedicated **ACRO (airplane) model memory** with everything linear, and do curves, expo and modes in the sim (the usual advice for sims; clean and predictable).
   2. Use the real **heli model memory**, so the pilot trains with their actual curves and throttle-hold switch. Closer to the real thing, but the sim must read pitch from CH6 and treat CH1 as throttle.
   Both should be supported; option 2 is a selling point.
 
@@ -48,7 +48,7 @@ _2026-10-21 · status: exploring_
 
 ## 3. Flight physics
 
-HELI-X describes its model as blade-element style with tunable rotor inflow ("Euler flow"), ground effect, tip loss, stall and autorotation, with per-model mass, inertia, rotor geometry, RPM and curves (HELI-X V11 manual, §6). HoverHere uses ~30 coupled ODEs integrated with Runge-Kutta in a high-rate thread. Neither needs a desktop CPU: a single small helicopter's state integrates at 1 kHz in well under 1 ms per frame on a phone.
+Established desktop sims use blade-element style models with tunable rotor inflow, ground effect, tip loss, stall and autorotation, with per-model mass, inertia, rotor geometry, RPM and curves. HoverHere uses ~30 coupled ODEs integrated with Runge-Kutta in a high-rate thread. Neither needs a desktop CPU: a single small helicopter's state integrates at 1 kHz in well under 1 ms per frame on a phone.
 
 What "feels like a real heli" needs, in order of importance:
 
@@ -60,17 +60,17 @@ What "feels like a real heli" needs, in order of importance:
 6. **Head speed and governor:** RPM sag under load, throttle hold, autorotation.
 7. **Drag, wind and gusts:** airframe drag, steady wind with turbulence. Wind matters a lot for hover training.
 
-Two airframes cover it: a **~450–500 size flybarless 3D heli** and either a **micro (Blade 130/230 class)** or the owner's own heli. Tuning: start from published specs (mass, rotor diameter, head speed), then fly-tune against the owner's sense of the real thing. HELI-X itself is retuning its V11 physics with a helicopter-school instructor, so expect tuning to be iterative work, not a one-off.
+Two airframes cover it: a **~450–500 size flybarless 3D heli** and either a **micro (Blade 130/230 class)** or the owner's own heli. Tuning: start from published specs (mass, rotor diameter, head speed), then fly-tune against the owner's sense of the real thing. Desktop sims retune their physics with instructors too, so expect tuning to be iterative work, not a one-off.
 
 **Risk:** "feels right" is subjective and only the pilot can judge it. Mitigation: get a flyable prototype in front of the owner early and expose the key tuning knobs in-app.
 
 ## 4. Graphics
 
-The camera is a pilot standing still on the field. That allows a cheap trick HELI-X itself relies on: **photographic 360° panoramas** as scenery (HELI-X "airports" can be photo scenes), with an invisible ground plane for shadows and collisions. From a fixed eye point a good panorama looks photoreal, costs almost nothing to render, and works perfectly in VR because the pilot only turns their head. The owner can even shoot their own flying field with a phone's panorama mode or a 360° camera.
+The camera is a pilot standing still on the field. That allows a cheap trick desktop sims rely on: **photographic 360° panoramas** as scenery, with an invisible ground plane for shadows and collisions. From a fixed eye point a good panorama looks photoreal, costs almost nothing to render, and works perfectly in VR because the pilot only turns their head. The owner can even shoot their own flying field with a phone's panorama mode or a 360° camera.
 
 On top: a decent glTF helicopter model (CC-licensed models exist; or a commissioned/handmade one), spinning-blade blur discs, a real-time shadow under the heli (a key depth cue for hover), and sound (head-speed whine, tail buzz) for orientation and load. This is comfortably within a mid-range phone's GPU at 60 fps, and in VR at 2 × 60 fps.
 
-**Expected look:** clearly a real heli at a real field; not AAA polish, but closer to RealFlight/HELI-X than to a phone game.
+**Expected look:** clearly a real heli at a real field; not AAA polish, but closer to a desktop sim like RealFlight than to a phone game.
 
 ## 5. VR (Cardboard)
 
@@ -83,9 +83,9 @@ The pilot stands still and only turns their head, so **3DoF head tracking** is e
 
 ## 6. Training modes
 
-From the HELI-X V11 manual (§2.5). The hover trainer is the core of what the owner wants:
+What a good desktop sim's trainer offers. The hover trainer is the core of what the owner wants:
 
-- **Hover training:** pick which axes the sim flies for you (e.g. it holds altitude and you fly cyclic), set the height, which side of the heli faces you (tail-in, side-in, nose-in), **constant rotation speed and direction, or "swing"** (oscillate ±90°). Importantly, HELI-X's assist "flies like a teacher would": it doesn't pin the heli in place, it corrects like a buddy-box instructor, with a fast/robust slider.
+- **Hover training:** pick which axes the sim flies for you (e.g. it holds altitude and you fly cyclic), set the height, which side of the heli faces you (tail-in, side-in, nose-in), **constant rotation speed and direction, or "swing"** (oscillate ±90°). Importantly, the assist should fly like a teacher would: it doesn't pin the heli in place, it corrects like a buddy-box instructor, with a fast/robust slider.
 - **Target circle / box:** keep the heli inside a ring of chosen diameter (1 m, 3 m) on the ground; time-in-zone scoring.
 - **No-collective training:** height held, collective ignored, practice cyclic only.
 - **Crash-and-retry:** rewind a few seconds on crash.
@@ -93,21 +93,17 @@ From the HELI-X V11 manual (§2.5). The hover trainer is the core of what the ow
 
 These are simple controllers and game logic on top of the physics. The "teacher-like" assist is a set of PID loops whose outputs mix with the pilot's sticks; the circle game is a distance check and a timer.
 
-## 7. HELI-X demo in a sandbox?
-
-Not done, and not worth it. HELI-X runs on Windows/macOS/Linux (Java, jMonkeyEngine), but a headless cloud container has no GPU, display or transmitter, so there is nothing to learn by flying it here. Its license also forbids reverse engineering or derivative works, so its model files and code are off limits as a source. Its manual (public) was the useful part and is summarised above. The owner flying the demo on a PC with the same dongle **is** worth doing, as the "what good feels like" benchmark.
-
-## 8. Expected outcome
+## 7. Expected outcome
 
 | Area | Expectation |
 |---|---|
 | Transmitter on phone | Works natively for sure; in the browser very likely |
-| Hover feel | Close to HELI-X for hover and slow flight after tuning; 3D/aerobatic fidelity harder |
+| Hover feel | Close to a desktop sim for hover and slow flight after tuning; 3D/aerobatic fidelity harder |
 | Visuals | Photoreal field from panoramas, good heli model; well short of AAA but convincing |
 | VR | Workable 3DoF Cardboard mode; comfort depends on phone and viewer |
 | Training | Full hover trainer with circle, height-hold and auto-rotate: yes |
 
-## 9. Proposed next steps
+## 8. Proposed next steps
 
 1. **Run the probe** on the phone with the dongle and send back the report (go/no-go for the web path, axis map, whether WebXR VR is offered).
 2. **Physics spike:** a flat-screen web prototype with one 450-class FBL heli, a grass plane, a shadow, and a hover circle. The owner judges the feel. This is the main fidelity risk, so it goes first.
@@ -128,7 +124,6 @@ Not done, and not worth it. HELI-X runs on Windows/macOS/Linux (Java, jMonkeyEng
 
 ## Sources
 
-- HELI-X site and V11 user manual: <https://www.heli-x.info/cms/>, <https://heli-x.info/help11/UsersManualV11.pdf> (training modes §2.5, VR §4, model parameters §6)
 - Spektrum WS2000 dongle: <https://horizonhobby.com/wireless-simulator-usb-dongle-spmws2000>
 - HoverHere (GPLv3 Unity RC heli sim): <https://github.com/zulugithub/HoverHere>
 - helisim (blade element + finite-state wake model): <https://github.com/plafl/helisim>

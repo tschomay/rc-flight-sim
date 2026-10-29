@@ -1,6 +1,6 @@
 # rc-flight-sim
 
-A phone-based RC helicopter training simulator, in the spirit of HELI-X: flown with a real Spektrum DX6i through a wireless USB sim dongle, with a flat-screen mode and a Cardboard VR mode, realistic enough in feel and look to train for real flying. Its core is HELI-X-style hover training: held altitude, a target circle, automatic heading rotation, and inverted.
+A phone-based RC helicopter training simulator: flown with a real Spektrum DX6i through a wireless USB sim dongle, with a flat-screen mode and a Cardboard VR mode, realistic enough in feel and look to train for real flying. Its core is hover training: held altitude, a target circle, automatic heading rotation, and inverted.
 
 **Status:** `building`. A working web app ("Hover Trainer"), flown with a real transmitter on the phone. Incubated in [tschomay/Sandbox](https://github.com/tschomay/Sandbox) as `rc-heli-sim`; deployed on Vercel from `main` (`app/` is the project root, see `app/vercel.json`).
 
@@ -20,9 +20,10 @@ Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, 
 
 ## What's in the app
 
-- **Helis:** a generic 450 FBL 3D heli and an mCP X BL2-class micro.
+- **Helis:** generic 450 and 600 FBL 3D helis and an mCP X BL2-class micro.
 - **Flight model:** 1 kHz, blade-element rotor with dynamic inflow, ground effect, vortex ring, flapping, governor, autorotation, FBL rate control with heading-hold tail. See [docs/physics.md](docs/physics.md).
-- **Hover trainer:** pick which of collective, cyclic or rudder the trainer flies. Set the height, circle size (1–4 m), which side faces you, upright or inverted, heading hold, rotate left or right at a set speed, or ±90° swing. Scores time in the circle (a column at any height, or a ±1/±2 m window); leaving it can count as a crash, like HELI-X. One-tap presets: rotating hover, inverted hover, inverted rotating, nose-in.
+- **Hover trainer:** pick which of collective, cyclic or rudder the trainer flies. Set the height, circle radius (0.5–3 m), which side faces you, upright or inverted, heading hold, rotate left or right at a set speed, or ±90° swing. Scores time in the circle (a column at any height, or a ±1/±2 m window); leaving it can count as a crash. One-tap presets: rotating hover, inverted hover, inverted rotating, nose-in.
+- **Hand-over:** each hover exercise starts paused until you move the throttle stick; when you fly the collective yourself (and after every crash reset), it waits until the stick reaches the hover position, shown on a gauge, so the heli isn't handed over with the throttle in the wrong place.
 - **Flight school (optional):** ArchmageAU's guide ["From tail-in to all 8s and funnels in 6 months"](https://www.helifreak.com/showthread.php?t=531380) (HeliFreak, 2013), built in with credit. Lessons 1–12, timed sessions, automatic crash counting, and the guide's log and session rules (speed up/down, alternate direction, hand over the collective, advance). The log is editable, the next session can be overridden, and the log exports as CSV.
 - **Automatic scoring:** ground outlines (circle or figure 8) count laps and 8s, labelled upright/inverted and forward/backward/nose-in/tail-in, so lessons 6–11a are scored and "passed" is suggested when the goal is met. Compass points on the hover circle score 8-point piros (lesson 5a).
 - **Backup:** import/export CSV or full JSON, and optional automatic backup to your own Vercel Blob store (the read-write token is the password; see Flight school → Backup).

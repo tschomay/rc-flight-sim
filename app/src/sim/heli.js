@@ -63,6 +63,7 @@ export class Heli {
     this.govTarget = this.omega;
     this.vi = airborne ? (inverted ? -this.vh : this.vh) : 0;
     this.lamSS = this.omega > 0 ? this.vi / (this.omega * this.R) : 0;
+    this._mu = 0; this._lam = this.lamSS;  // flow state pitchForThrust reads before the first step
     this.beta = { r: 0, p: 0 };
     const qHover = airborne ? this.hoverTorqueEstimate() : 0;
     this.govI = qHover;

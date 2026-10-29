@@ -19,15 +19,31 @@ export class FlatView {
 
   resize(w, h) { this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
 
-  update(target, dt, { autoZoom = true, refDistance = 6, baseFov = 34 } = {}) {
+  /**
+   * `ground`, when given, is a point on the ground (the hover circle's centre) to keep in
+   * the frame below the heli, as long as the heli itself stays in view.
+   */
+  update(target, dt, { autoZoom = true, refDistance = 6, baseFov = 34, ground = null } = {}) {
     const k = Math.min(1, dt * 14);
-    this.look.lerp(target, k);
+    this.look.lerp(ground ? this.framed(target, ground) : target, k);
     this.camera.lookAt(this.look);
     const d = this.camera.position.distanceTo(target);
     const want = autoZoom ? THREE.MathUtils.clamp(baseFov * Math.pow(refDistance / Math.max(d, 0.1), 0.6), Math.min(12, baseFov), baseFov) : baseFov;
     this.fov += (want - this.fov) * Math.min(1, dt * 3);
     this.camera.fov = this.fov;
     this.camera.updateProjectionMatrix();
+  }
+
+  /** A look point toward the heli, tilted down to show `ground` too when both fit. */
+  framed(target, ground) {
+    const eye = this.camera.position;
+    const elev = (p) => Math.atan2(p.y - eye.y, Math.hypot(p.x - eye.x, p.z - eye.z));
+    const eH = elev(target), eG = elev(ground);
+    const half = (this.fov * Math.PI) / 360;
+    // centre between the two, but never so low that the heli rises above the top third of the frame
+    const c = Math.min(eH, Math.max((eH + eG) / 2, eH - 0.4 * half));
+    const dx = target.x - eye.x, dz = target.z - eye.z, h = Math.hypot(dx, dz) || 1;
+    return new THREE.Vector3(target.x, eye.y + Math.tan(c) * h, target.z);
   }
 
   render(renderer, scene) { renderer.render(scene, this.camera); }
