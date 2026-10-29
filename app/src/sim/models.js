@@ -36,6 +36,36 @@ export const MODELS = {
     look: { canopy: 0xf2f2f0, trim: 0xd9381e, frame: 0x222222, blade: 0x1a1a1a },
   },
 
+  "fbl600": {
+    name: "600 FBL 3D",
+    blurb: "Generic 600-size flybarless 3D heli: 1350 mm rotor (600 mm blades), 12S, ~3.7 kg. Slower headspeed and more inertia: steadier and more deliberate than a 450.",
+    mass: 3.7,
+    inertia: { roll: 0.15, yaw: 0.46, pitch: 0.43 },
+    rotor: {
+      radius: 0.675, chord: 0.048, blades: 2,
+      liftSlope: 5.9, cd0: 0.011, cd2: 0.55, tipLoss: 0.97,
+      hubHeight: 0.26,
+      hubStiffness: 340,
+      flapTau: 0.032,
+      inflowTau: 0.09,
+      inertia: 0.06,
+      direction: -1,
+      maxTilt: 14,
+    },
+    headspeed: { normal: 1750, idle: 2050 },
+    pitch: { normal: [-4, 12], idle: [-12, 12], hold: [-12, 12] },
+    maxCyclic: 12,
+    motor: { maxPower: 3500, spool: 600 },
+    tail: { arm: 0.78, thrust: [-20, 8], tau: 0.02, driven: "main", damping: 1.0, radius: 0.125 },
+    rates: { roll: 360, pitch: 360, yaw: 450 },
+    drag: { x: 0.04, y: 0.2, z: 0.13 },
+    geometry: {
+      skidY: -0.31, skidX: [-0.22, 0.2], skidZ: 0.17,
+      tailY: 0.04, finY: -0.19, noseX: 0.45, noseY: -0.06,
+    },
+    look: { canopy: 0x22324f, trim: 0xff8a1f, frame: 0x1c1c1c, blade: 0x1a1a1a },
+  },
+
   "mcpx": {
     name: "mCP X BL2 class",
     blurb: "Micro collective-pitch 3D heli: 263 mm rotor, 2S, ~62 g, motor-driven fixed-pitch tail.",

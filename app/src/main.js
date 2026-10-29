@@ -48,6 +48,7 @@ class App {
     this.mode = this.settings.mode;
     this.view = "flat";
     this.paused = false;
+    this.waiting = null;  // the hover trainer waits for the pilot's throttle before handing over
     this.acc = 0;
     this.prevReset = false;
     this.crashAt = 0;
@@ -147,7 +148,7 @@ class App {
       await cloudSave(b.token, s);
       b.lastAt = new Date().toISOString();
       b.lastError = null;
-      if (manual) this.ui.toast("Backed up", 1400);
+      if (manual) this.ui.toast(restoreSettings ? "Restored from the cloud" : "Backed up", 1600);
     } catch (e) {
       b.lastError = e.message || "failed";
       if (manual) this.ui.toast(`Backup failed: ${b.lastError}`, 3500);
@@ -215,12 +216,37 @@ class App {
     this.ui.sessionEnded(entry);
   }
 
-  restart() {
+  /**
+   * Respawn the heli. In the hover trainer the sim then holds still until the pilot is on
+   * the sticks: any throttle movement when the trainer flies the collective, or the stick
+   * brought to the hover position when the pilot does. An automatic reset after a crash
+   * only waits for the latter, so the heli isn't handed over with the throttle chopped.
+   */
+  restart({ auto = false } = {}) {
     this.crashAt = 0;
     this.ui.hideToast();
     this.trainer.start(this.heli, this.mode);
-    if (this.trainer.cfg.kind === "hover") this.mode = "idle";
+    const c = this.trainer.cfg;
+    if (c.kind === "hover") this.mode = "idle";
+    this.waiting = c.kind !== "hover" ? null : !c.assist.collective ? { kind: "match" } : auto ? null : { kind: "move" };
     this.acc = 0;
+  }
+
+  /** Release the waiting hover trainer once the throttle stick says the pilot is ready. */
+  checkHandover(sticks) {
+    const w = this.waiting;
+    if (w.kind === "move") {
+      w.from ??= sticks.coll;
+      w.done = Math.abs(sticks.coll - w.from) > 0.12;
+    } else {
+      // the collective that holds the hover, in the flight mode the pilot has selected
+      const mode = sticks.mode === "normal" ? "normal" : "idle";
+      const T = this.heli.def.mass * 9.81 * (this.heli.inverted ? -1 : 1);
+      w.target = this.heli.stickForPitch(this.heli.pitchForThrust(T), mode);
+      w.stick = sticks.coll;
+      w.done = sticks.mode !== "hold" && Math.abs(sticks.coll - w.target) < 0.05;
+    }
+    if (w.done) { this.waiting = null; this.ui.toast("You have control", 1000); }
   }
 
   resize() {
@@ -270,11 +296,13 @@ class App {
     this.last = now;
     const { sticks, source } = this.readInput(dt);
 
-    if (this.session && !this.paused) {
+    if (this.waiting && !this.paused) this.checkHandover(sticks);
+    const held = this.paused || !!this.waiting;
+    if (this.session && !held) {
       this.session.elapsed += dt;
       if (this.session.elapsed >= this.settings.school.sessionMinutes * 60) { this.ui.toast("Session complete", 2000); this.endSession(); }
     }
-    if (!this.paused) {
+    if (!held) {
       this.acc += dt * this.settings.timeScale / 100;
       let n = 0;
       while (this.acc >= DT && n < 60) {
@@ -293,7 +321,7 @@ class App {
         this.trainer.crashes++;
         if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
         this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : " — tap Reset"}`, 0);
-      } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart();
+      } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart({ auto: true });
     }
 
     const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
@@ -309,7 +337,8 @@ class App {
       this.cardboard.update(hp, dt);
       this.cardboard.render(this.renderer, this.scene);
     } else {
-      this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov });
+      const ground = this.trainer.cfg.kind === "hover" ? new THREE.Vector3(0, 0, -this.trainer.cfg.distance) : null;
+      this.flat.update(hp, dt, { autoZoom: this.settings.view.autoZoom, refDistance: this.refDistance, baseFov: this.settings.view.fov, ground });
       if (this.view === "anaglyph") {
         this.flat.camera.focus = Math.max(1, this.flat.camera.position.distanceTo(hp));  // heli sits at screen depth
         this.anaglyph.render(this.scene, this.flat.camera);
@@ -359,7 +388,9 @@ class App {
     }
     this.view = "cardboard";
     document.body.classList.add("vr");
-    try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch { /* fullscreen optional */ }
+    if (!document.fullscreenElement) {
+      try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch { /* fullscreen optional */ }
+    }
     try { await screen.orientation?.lock?.("landscape"); } catch { /* lock optional */ }
     try { this.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
     this.cardboard.start();
@@ -367,11 +398,11 @@ class App {
     this.ui.toast(this.settings.view.headTracking ? "Tap once to centre the view, twice to reset" : "Tap twice to reset", 3000);
   }
 
+  /** Back to the flat view. Full screen stays on: the Full screen button turns it off. */
   exitVR() {
     this.view = "flat";
     document.body.classList.remove("vr");
     this.cardboard.stop();
-    try { document.fullscreenElement && document.exitFullscreen(); } catch { /* ignore */ }
     try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
     this.wakeLock?.release?.().catch(() => {});
     this.resize();

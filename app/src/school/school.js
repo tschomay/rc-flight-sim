@@ -1,6 +1,8 @@
 // Flight school: ArchmageAU's "From tail-in to all 8s and funnels in 6 months" (HeliFreak,
 // 2013), built in as an optional course. Lesson text here is a short paraphrase; the
 // pilot is pointed to the original for the full guide.
+// A saved copy of the guide is in docs/ ("From tail-in to all 8s and funnels in 6 months -
+// HeliFreak.pdf").
 //
 // The course state is never stored directly: it is replayed from the log every time, so
 // editing or deleting an entry re-derives where the pilot is and what comes next. A
@@ -84,7 +86,7 @@ export const L4_CYCLE = [["inverted", "cw"], ["inverted", "ccw"], ["upright", "c
 export const DEFAULT_SCHOOL = {
   sessionMinutes: 15,
   restMinutes: 15,
-  circle: 3,
+  circle: 4,       // m diameter of the hover area (shown as a 2 m radius)
   log: [],         // entries, oldest first (see sessionEntry)
   deleted: [],     // keys of deleted entries, so a deletion survives merging with a backup
   override: null,  // { lesson?, orientation?, direction?, speed?, collAssist? } for the next session only
@@ -180,6 +182,7 @@ export function trainerFor(plan, school, base) {
     assist: { collective: plan.collAssist, rudder: plan.rudderAssist, cyclic: false },
     height: SCHOOL_HEIGHT,
     circle: school.circle,
+    distance: Math.max(base.distance, school.circle / 2 + 3),  // keep the area's near edge 3 m in front of the pilot
     orientation: "tail",
     inverted: plan.orientation === "inverted",
     rotation: plan.rudderAssist ? plan.direction : "off",

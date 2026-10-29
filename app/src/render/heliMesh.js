@@ -4,17 +4,19 @@
 
 import * as THREE from "three";
 
-function discTexture() {
+/** The blurred disc spinning blades make, in the blades' colour. */
+function discTexture(blade) {
   const c = document.createElement("canvas");
   c.width = c.height = 256;
   const g = c.getContext("2d");
+  const rgb = [16, 8, 0].map((sh) => (blade >> sh) & 255).join(",");
   const grd = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  grd.addColorStop(0, "rgba(20,20,20,0)");
-  grd.addColorStop(0.12, "rgba(20,20,20,0.3)");
-  grd.addColorStop(0.85, "rgba(25,25,25,0.5)");
-  grd.addColorStop(0.95, "rgba(10,10,10,0.8)");
-  grd.addColorStop(0.99, "rgba(10,10,10,0.6)");
-  grd.addColorStop(1, "rgba(10,10,10,0)");
+  grd.addColorStop(0, `rgba(${rgb},0)`);
+  grd.addColorStop(0.12, `rgba(${rgb},0.3)`);
+  grd.addColorStop(0.85, `rgba(${rgb},0.5)`);
+  grd.addColorStop(0.95, `rgba(${rgb},0.8)`);
+  grd.addColorStop(0.99, `rgba(${rgb},0.6)`);
+  grd.addColorStop(1, `rgba(${rgb},0)`);
   g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -82,7 +84,7 @@ export class HeliMesh {
     }
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.014, 0.018), metal);
     this.rotorSpin.add(head);
-    this.discMat = new THREE.MeshBasicMaterial({ map: discTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0 });
+    this.discMat = new THREE.MeshBasicMaterial({ map: discTexture(look.blade), transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0 });
     const disc = new THREE.Mesh(new THREE.CircleGeometry(R, 64), this.discMat);
     disc.rotation.x = -Math.PI / 2;
     this.rotorTilt.add(this.rotorSpin, disc);

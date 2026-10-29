@@ -1,4 +1,4 @@
-// Training modes, modelled on HELI-X's hover trainer.
+// Training modes: free flight and a hover trainer.
 //
 // The pilot picks which functions the trainer flies (collective, cyclic, rudder). The
 // trainer flies them through the same sticks and FBL a pilot would, like an instructor
@@ -29,7 +29,7 @@ export const DEFAULT_TRAINER = {
   swingPeriod: 8,           // s for a full -90 → +90 → -90 swing
   gain: 0.6,                // 0 = gentle/robust, 1 = tight/fast
   heightWindow: 0,          // m either side of the target height that still counts; 0 = any height
-  leaveIsCrash: false,      // HELI-X style: wandering out of the circle ends the attempt
+  leaveIsCrash: false,      // wandering out of the circle ends the attempt
   pattern: DEFAULT_PATTERN, // ground outline scored automatically: circles or 8s
   compass: false,           // compass points on the hover circle, scoring 8-point piros
 };

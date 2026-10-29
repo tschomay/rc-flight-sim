@@ -47,6 +47,10 @@ export function slider(label, min, max, step, value, set, fmt = (v) => v) {
 
 const fmt1 = (u) => (v) => `${(+v).toFixed(1)} ${u}`;
 
+/** Radius choices for the hover circle; the settings keep its diameter. */
+export const radii = (list) => list.map((r) => [r * 2, `${r} m`]);
+const CIRCLE_RADII = radii([0.5, 1, 1.5, 2, 3]);
+
 export class UI {
   constructor(app) {
     this.app = app;
@@ -123,14 +127,31 @@ export class UI {
       const text = prog?.text || sc.summary() || (trainer.cfg.compass ? "Stop for 1 s at each compass point" : "Fly the outline: laps count automatically");
       ex = h("div", { class: `score ex ${prog?.passed ? "in" : ""}` }, text, trainer.cfg.compass && next != null ? h("b", {}, ` \u2192 ${COMPASS[next]}`) : null);
     }
-    this.el.hud.replaceChildren(...[h("div", { class: "chips" }, rows), score, ex].filter(Boolean));
+    this.el.hud.replaceChildren(...[h("div", { class: "chips" }, rows), this.waitPanel(), score, ex].filter(Boolean));
+  }
+
+  /** While the trainer waits for the pilot: what to do with the throttle to take over. */
+  waitPanel() {
+    const w = this.app.waiting;
+    if (!w) return null;
+    if (w.kind === "move") return h("div", { class: "score wait" }, h("b", {}, "Paused. "), "Move the throttle stick to start.");
+    if (w.target == null) return null;
+    const pos = (v) => `left:${50 + Math.max(-1, Math.min(1, v)) * 50}%`;
+    const hold = this.app.mode === "hold";
+    return h("div", { class: "score wait" },
+      h("b", {}, "Paused. "), hold ? "Switch off throttle hold, then bring" : "Bring", " the throttle to the hover mark to take control",
+      w.stick < w.target ? " (raise it)." : " (lower it).",
+      h("div", { class: "bar" }, h("i", { class: "goal", style: pos(w.target) }), h("i", { style: pos(w.stick) })));
   }
 
   // ---------- settings sheet ----------
   openSheet(tab = this.tab) {
-    this.tab = tab;
     const s = this.app.settings;
     const sheet = this.el.sheet;
+    // refreshing the tab that's showing keeps its scroll position and open sections
+    const old = !sheet.hidden && tab === this.tab ? sheet.querySelector(".sheet-body") : null;
+    const keep = old && { top: old.scrollTop, open: [...old.querySelectorAll("details")].map((d) => d.open) };
+    this.tab = tab;
     const tabs = [["train", "Training"], ["school", "Flight school"], ["heli", "Helicopter"], ["tx", "Transmitter"], ["view", "View & wind"]];
     const body = h("div", { class: "sheet-body" }, this[`tab_${tab}`](s));
     sheet.replaceChildren(
@@ -139,6 +160,10 @@ export class UI {
         h("button", { type: "button", class: "close", "aria-label": "Close settings", onclick: () => this.closeSheet() }, "Fly")),
       body);
     sheet.hidden = false;
+    if (keep) {
+      body.querySelectorAll("details").forEach((d, i) => { if (keep.open[i] != null) d.open = keep.open[i]; });
+      body.scrollTop = keep.top;
+    }
     this.app.paused = true;
   }
 
@@ -183,7 +208,7 @@ export class UI {
       slider("Rotation speed", 3, 90, 1, t.rotationSpeed, set("rotationSpeed"), (v) => `${v}°/s`),
       slider("Swing period", 4, 20, 1, t.swingPeriod, set("swingPeriod"), (v) => `${v} s`),
       slider("Height", 0.5, 5, 0.1, t.height, set("height"), fmt1("m")),
-      seg("Circle diameter", [[1, "1 m"], [2, "2 m"], [3, "3 m"], [4, "4 m"]].map(([v, l]) => [v, l]), t.circle, (v) => { t.circle = +v; this.changed("trainer"); }),
+      seg("Circle radius", CIRCLE_RADII, t.circle, (v) => { t.circle = +v; this.changed("trainer"); }),
       h("fieldset", { class: "field" }, h("legend", {}, "Ground pattern (scored automatically)"),
         seg("Outline", [["none", "None"], ["circle", "Circle"], ["eight", "Figure 8"]], t.pattern?.kind || "none", (v) => { t.pattern = { ...t.pattern, kind: v }; this.changed("trainer"); }),
         slider("Circle radius", 3, 10, 0.5, t.pattern?.radius ?? 5, (v) => { t.pattern = { ...t.pattern, radius: v }; this.changed("trainer"); }, fmt1("m")),
@@ -191,7 +216,7 @@ export class UI {
         toggle("Compass points on the hover circle", t.compass, (v) => { t.compass = v; this.changed("trainer"); }, "scores 8-point piros: stop 1 s at each point in turn")),
       seg("Counts as inside", [[0, "Any height"], [1, "±1 m"], [2, "±2 m"]], t.heightWindow ?? 0, (v) => { t.heightWindow = +v; this.changed("trainer"); }),
       toggle("Show the column above the circle", s.view.column, (v) => { s.view.column = v; this.changed("trainer"); }, "the ring on the ground always shows"),
-      toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "like HELI-X: wander out and the heli resets"),
+      toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "wander out and the heli resets"),
       slider("Distance from you", 2, 12, 0.5, t.distance, set("distance", "trainer-restart"), fmt1("m")),
       slider("Trainer strength", 0, 1, 0.05, t.gain, set("gain"), (v) => (v < 0.35 ? "gentle" : v < 0.7 ? "normal" : "tight")),
       h("div", { class: "row" },
@@ -277,7 +302,7 @@ export class UI {
           h("li", {}, "The radio's dual rates and expo stack with the sim's, which can make the sticks feel twitchy or uneven."),
           h("li", {}, "If the swash type is CCPM (120°) rather than 1-servo, aileron, elevator and pitch are mixed together and the sticks won't separate cleanly."),
           h("li", {}, "The gyro gain is usually on the GEAR channel, which then can't be a switch.")),
-        h("p", { class: "hint" }, "In ACRO, channels 1–4 are the raw sticks and channels 5–6 are the GEAR and FLAP/MIX switches. That gives the sim clean, linear sticks and two real switches, and the sim does the heli part (curves, idle up, hold) itself, like HELI-X. Keep your heli model for the real heli and use a separate ACRO memory for the sim.")),
+        h("p", { class: "hint" }, "In ACRO, channels 1–4 are the raw sticks and channels 5–6 are the GEAR and FLAP/MIX switches. That gives the sim clean, linear sticks and two real switches, and the sim does the heli part (curves, idle up, hold) itself. Keep your heli model for the real heli and use a separate ACRO memory for the sim.")),
       h("p", { class: "hint" }, "Keyboard (desktop): W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, R reset."),
     ];
   }
