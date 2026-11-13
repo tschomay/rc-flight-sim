@@ -35,6 +35,8 @@ export const DEFAULT_TRAINER = {
 };
 
 const LEAVE_MARGIN = 0.25;  // m past the circle's edge before leaving counts as a crash
+export const ZONE_YELLOW = 0.5;  // fraction of the circle's radius where the circle turns yellow
+export const ZONE_RED = 0.8;     // … and red
 
 export class Trainer {
   constructor(cfg = DEFAULT_TRAINER) {
@@ -45,7 +47,7 @@ export class Trainer {
   resetScore() {
     this.t = 0;
     this.inside = false;
-    this.zone = "in";  // "in" | "edge" | "out"
+    this.zone = "in";  // "in" | "edge" (yellow) | "danger" (red, still inside) | "out"
     this.timeIn = 0;
     this.timeTotal = 0;
     this.streak = 0;
@@ -69,12 +71,15 @@ export class Trainer {
     return v3(0, this.cfg.height, -this.cfg.distance);
   }
 
-  /** Spawn the heli for this exercise. */
-  start(heli, mode = "idle") {
+  /**
+   * Spawn the heli for this exercise. `heading` (radians) overrides the exercise's
+   * orientation, e.g. to carry on facing the way the heli was when it crashed.
+   */
+  start(heli, mode = "idle", { heading = null } = {}) {
     const c = this.cfg;
     this.t = 0;
     this.collI = 0;
-    this.headingT = ORIENTATIONS[c.orientation].heading * DEG;
+    this.headingT = heading ?? ORIENTATIONS[c.orientation].heading * DEG;
     if (c.kind === "free") {
       heli.reset({ pos: v3(0, 0, -c.distance), yaw: 90 * DEG, airborne: false, mode });
     } else {
@@ -150,10 +155,13 @@ export class Trainer {
     const r = Math.hypot(d.x, d.z);
     const hw = c.heightWindow ?? 0;
     this.inside = r <= c.circle / 2 && !heli.onGround && (hw <= 0 || Math.abs(d.y) <= hw);
-    // near the edge: the outer 30% of the radius (at least 0.3 m), or near the height window's limits
-    const edge = Math.max(0.3, 0.15 * c.circle);
-    const nearEdge = r > c.circle / 2 - edge || (hw > 0 && Math.abs(d.y) > hw - 0.3);
-    this.zone = !this.inside ? "out" : nearEdge ? "edge" : "in";
+    // warnings, early enough to react to: yellow past half the radius, red past 80%
+    // (still inside), or near the height window's limits
+    const R = c.circle / 2;
+    const dy = hw > 0 ? Math.abs(d.y) : 0;
+    const danger = r > ZONE_RED * R || (hw > 0 && dy > hw - 0.25);
+    const caution = r > ZONE_YELLOW * R || (hw > 0 && dy > hw - 0.6);
+    this.zone = !this.inside ? "out" : danger ? "danger" : caution ? "edge" : "in";
     if (c.leaveIsCrash && this.t > 0.5 && r > c.circle / 2 + LEAVE_MARGIN) heli.crash("Left the circle");
     this.timeTotal += dt;
     if (this.inside) { this.timeIn += dt; this.streak += dt; this.best = Math.max(this.best, this.streak); }

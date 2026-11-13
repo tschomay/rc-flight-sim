@@ -3,20 +3,19 @@
 // past sessions by editing the log (the plan re-derives from it), the lesson by a jump.
 
 import { h, seg, toggle, slider, radii } from "./ui.js";
-import { CREDIT, LESSONS, lessonById, planNext, restLeft, dailyStatus, toCSV, nextLessonId } from "../school/school.js";
+import { CREDIT, LESSONS, lessonById, planNext, restLeft, dailyStatus, toCSV, nextLessonId, lessonRules } from "../school/school.js";
 import { lessonProgress } from "../sim/exercises.js";
 import { entryKey, exportJSON, parseImport, mergeLogs, looksLikeToken } from "../school/backup.js";
 
 const DIRS = [["ccw", "CCW"], ["cw", "CW"], ["both", "Both"]];
 const ORIENT = [["upright", "Upright"], ["inverted", "Inverted"]];
-const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+export const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 const dirLabel = (d) => ({ cw: "CW", ccw: "CCW", both: "CW + CCW" }[d] || d);
 
 export function schoolChip(app) {
   const ss = app.session;
   if (!ss) return null;
-  const left = Math.max(0, app.settings.school.sessionMinutes * 60 - ss.elapsed);
-  return h("span", { class: "chip school" }, `L${ss.plan.lesson} ${mmss(left)} · ${ss.crashes} crash${ss.crashes === 1 ? "" : "es"}`);
+  return h("span", { class: "chip school" }, `Lesson ${ss.plan.lesson} \u00b7 ${ss.crashes} crash${ss.crashes === 1 ? "" : "es"}`);
 }
 
 function creditBlock() {
@@ -26,12 +25,13 @@ function creditBlock() {
     " — read the full guide there; it has videos for every lesson.");
 }
 
-function lessonCard(lesson) {
+function lessonCard(lesson, minutes) {
   return h("div", { class: "lesson" },
     h("h3", {}, `Lesson ${lesson.id}: ${lesson.title}`),
     h("p", {}, lesson.summary),
-    h("p", { class: "goal" }, h("b", {}, "Pass: "), lesson.goal),
-    lesson.tips ? h("ul", {}, lesson.tips.map((t) => h("li", {}, t))) : null);
+    h("p", { class: "goal" }, h("b", {}, "Goal: "), lesson.goal),
+    h("p", { class: "lbl" }, "How it progresses"),
+    h("ul", {}, lessonRules(lesson, minutes).map((t) => h("li", {}, t))));
 }
 
 export function schoolTab(ui, s) {
@@ -63,7 +63,7 @@ export function schoolTab(ui, s) {
   notices.push(h("p", { class: "hint" }, `${daily.today} training session${daily.today === 1 ? "" : "s"} today. At least one a day.`));
 
   const isHover = lesson.kind === "hover";
-  out.push(h("h2", {}, "Next session"), ...notices, lessonCard(lesson),
+  out.push(h("h2", {}, "Next session"), ...notices, lessonCard(lesson, sc.sessionMinutes),
     h("div", { class: "plan" },
       h("label", { class: "field" }, h("span", { class: "lbl" }, "Lesson"),
         h("select", { onchange: (e) => over("lesson")(e.target.value) },

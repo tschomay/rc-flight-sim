@@ -48,6 +48,7 @@ class App {
     this.mode = this.settings.mode;
     this.view = "flat";
     this.paused = false;
+    this.userPaused = false;  // paused from the session timer (the settings sheet pauses too)
     this.waiting = null;  // the hover trainer waits for the pilot's throttle before handing over
     this.acc = 0;
     this.prevReset = false;
@@ -169,6 +170,13 @@ class App {
     this.applyModel(); this.applyAll(); this.restart();
   }
 
+  /** Pause or resume from the session timer. */
+  togglePause() {
+    if (!this.ui.el.sheet.hidden) { this.ui.closeSheet(); return; }  // settings open: back to flying
+    this.userPaused = !this.userPaused;
+    this.paused = this.userPaused;
+  }
+
   setMode(m) {
     this.mode = m;
     this.settings.mode = m;
@@ -202,6 +210,7 @@ class App {
     const ss = this.session;
     if (!ss) return;
     this.session = null;
+    this.userPaused = false;
     const s = this.settings;
     const entry = sessionEntry(ss.plan, { startedAt: ss.startedAt, seconds: ss.elapsed, crashes: ss.crashes, outOfArea: ss.outOfArea });
     // log what was actually flown, in case settings were changed mid-session
@@ -223,10 +232,14 @@ class App {
    * only waits for the latter, so the heli isn't handed over with the throttle chopped.
    */
   restart({ auto = false } = {}) {
+    const c = this.trainer.cfg;
+    // after a crash, optionally come back facing the way the heli was, so a piro carries on
+    // (only where the heading isn't fixed by the exercise: rotating, or the pilot's rudder)
+    const keep = this.heli.crashed && this.settings.keepHeading && c.kind === "hover" &&
+      (c.rotation === "cw" || c.rotation === "ccw" || !c.assist.rudder);
     this.crashAt = 0;
     this.ui.hideToast();
-    this.trainer.start(this.heli, this.mode);
-    const c = this.trainer.cfg;
+    this.trainer.start(this.heli, this.mode, { heading: keep ? this.heli.heading : null });
     if (c.kind === "hover") this.mode = "idle";
     this.waiting = c.kind !== "hover" ? null : !c.assist.collective ? { kind: "match" } : auto ? null : { kind: "move" };
     this.acc = 0;
@@ -320,7 +333,7 @@ class App {
         this.crashAt = now;
         this.trainer.crashes++;
         if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
-        this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : " — tap Reset"}`, 0);
+        this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : this.session ? " — tap the timer, then Reset" : " — tap Reset"}`, 0);
       } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart({ auto: true });
     }
 

@@ -63,7 +63,7 @@ export const MODELS = {
       skidY: -0.31, skidX: [-0.22, 0.2], skidZ: 0.17,
       tailY: 0.04, finY: -0.19, noseX: 0.45, noseY: -0.06,
     },
-    look: { canopy: 0x22324f, trim: 0xff8a1f, frame: 0x1c1c1c, blade: 0x1a1a1a },
+    look: { canopy: 0xf7d41e, trim: 0x1f4fd1, frame: 0x1c1c1c, blade: 0x1a1a1a },  // high-vis yellow: easy to see against grass and sky
   },
 
   "mcpx": {

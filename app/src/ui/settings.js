@@ -20,6 +20,7 @@ export const DEFAULTS = {
   view: { fov: 34, autoZoom: true, vrMode: "auto", stereo: "cardboard", headTracking: true, column: true, lens: { k1: 0.28, k2: 0.12, zoom: 0.85, ipd: 0.064, fov: 80 } },
   wind: { speed: 0, from: 0, gust: 0.3 },
   autoReset: true,
+  keepHeading: true,                  // hover trainer: after a crash, restart facing the way the heli was
   school: DEFAULT_SCHOOL,
   backup: { token: "", auto: true, lastAt: null, lastError: null },
   timeScale: 100,                     // % of real time the sim runs at

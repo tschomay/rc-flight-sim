@@ -192,10 +192,19 @@ test("self-levelling: centred stick levels the heli, held stick holds a tilt", a
   assert.ok(right.y < 0, "right stick banks to the right");
 });
 
-test("trainer: zone is in, edge near the rim, out beyond it", () => {
+test("trainer: yellow past half the radius, red past 80% while still inside, out beyond", () => {
   const h = new Heli(MODELS.fbl450);
   const tr = new Trainer({ ...DEFAULT_TRAINER, circle: 3 });
   tr.start(h);
   const at = (x) => { h.reset({ pos: v3(x, 2, -DEFAULT_TRAINER.distance), airborne: true }); tr.update(h, sticks(), DT); return tr.zone; };
-  assert.deepEqual([at(0), at(1.3), at(1.7)], ["in", "edge", "out"]);
+  assert.deepEqual([at(0.5), at(1.0), at(1.3), at(1.7)], ["in", "edge", "danger", "out"]);
+});
+
+test("trainer: a restart can carry on from a given heading", () => {
+  const h = new Heli(MODELS.fbl450);
+  const tr = new Trainer({ ...DEFAULT_TRAINER, rotation: "ccw" });
+  tr.start(h, "idle", { heading: 1 });
+  assert.ok(Math.abs(h.heading - 1) < 1e-6, `heading ${h.heading}`);
+  tr.start(h);
+  assert.ok(Math.abs(h.heading - Math.PI / 2) < 1e-6, "default is the exercise's orientation");
 });

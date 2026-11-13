@@ -1,13 +1,13 @@
 // Flight-school rules, replayed from the log.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SCHOOL, planNext, replay, sessionEntry, restLeft, L4_CYCLE } from "../src/school/school.js";
+import { DEFAULT_SCHOOL, planNext, replay, sessionEntry, restLeft, L4_CYCLE, crashLimits } from "../src/school/school.js";
 
 let clock = Date.UTC(2026, 0, 1, 8);
-function fly(school, crashes) {
+function fly(school, crashes, minutes = 15) {
   const { plan } = planNext(school);
   clock += 40 * 60000;
-  school.log.push(sessionEntry(plan, { startedAt: clock, seconds: 900, crashes, outOfArea: 0 }));
+  school.log.push(sessionEntry(plan, { startedAt: clock, seconds: minutes * 60, crashes, outOfArea: 0 }));
   school.override = null;
   return planNext(school).plan;
 }
@@ -52,6 +52,18 @@ test("lesson 4: orientation cycle, 50-crash rule, upright always full speed", ()
   assert.deepEqual([p.orientation, p.speed], ["upright", 100]);
   p = fly(s, 30);   // upright session doesn't touch inverted speed
   assert.deepEqual([p.orientation, p.speed], ["inverted", 40]);
+});
+
+test("crash limits scale with the session length", () => {
+  assert.deepEqual(crashLimits(15), { slower: 7, faster: 5, halve: 50 });
+  assert.deepEqual(crashLimits(10), { slower: 5, faster: 3, halve: 33 });
+  const s = fresh();
+  let p = fly(s, 6, 10);   // 6 in 10 min is over the scaled 5
+  assert.equal(p.speed, 90);
+  p = fly(s, 4, 10);       // between 3 and 5: same speed
+  assert.equal(p.speed, 90);
+  p = fly(s, 2, 10);       // under 3: faster
+  assert.equal(p.speed, 95);
 });
 
 test("editing a log entry re-derives the plan", () => {
