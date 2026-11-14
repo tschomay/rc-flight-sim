@@ -310,7 +310,7 @@ export function buildWorld(scene) {
       column.position.y = (lo + hi) / 2;
     },
     setZone(zone) {
-      const c = { in: 0x4be37a, edge: 0xffd23f, out: 0xff5a4e }[zone];
+      const c = { in: 0x4be37a, edge: 0xffd23f, danger: 0xff5a4e, out: 0xff5a4e }[zone];
       ringMat.color.setHex(c); airMat.color.setHex(c); colMat.color.setHex(c);
     },
     update(heliPos, wind) {

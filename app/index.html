@@ -43,8 +43,16 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .chip.inv { border-color: var(--warn); color: var(--warn); }
 .chip.slow { border-color: #6fb6ff; color: #6fb6ff; }
 .score { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px; padding: 4px 10px; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; width: fit-content; }
-.score.in { border-left-color: var(--ok); } .score.out { border-left-color: var(--bad); }
-.score b { color: var(--warn); } .score.in b { color: var(--ok); } .score.out b { color: var(--bad); }
+.score.in { border-left-color: var(--ok); } .score.out, .score.danger { border-left-color: var(--bad); }
+.score b { color: var(--warn); } .score.in b { color: var(--ok); } .score.out b, .score.danger b { color: var(--bad); }
+
+/* training-session countdown: the only HUD while a session runs; tap it to pause */
+#timer { position: fixed; top: var(--pad-t); left: var(--pad-l); z-index: 3; padding: 4px 10px; border-radius: 999px; font: 600 13px/1.4 var(--mono); font-variant-numeric: tabular-nums; opacity: 0.85; }
+#timer.low { bottom: calc(var(--pad-b) + 4px); top: auto; }
+#timer.paused { opacity: 1; border-color: var(--accent); color: var(--accent); }
+body.focus #top, body.focus #modes { display: none; }
+body.focus #hud { pointer-events: none; }
+body.session:not(.timer-low) #hud { top: calc(var(--pad-t) + 34px); }
 
 #top { position: fixed; top: var(--pad-t); right: var(--pad-r); display: flex; gap: 6px; }
 #top button { padding: 8px 12px; }
@@ -68,7 +76,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .stick-label { position: absolute; bottom: -1.5em; left: 0; right: 0; text-align: center; font-size: 10px; color: rgba(255, 255, 255, 0.55); letter-spacing: 0.04em; }
 
 /* VR */
-body.vr #hud, body.vr #top, body.vr #modes, body.vr #sticks { display: none; }
+body.vr #hud, body.vr #top, body.vr #modes, body.vr #sticks, body.vr #timer { display: none; }
 #vr-exit { position: fixed; top: var(--pad-t); left: 50%; transform: translateX(-50%); display: none; opacity: 0.6; }
 body.vr #vr-exit { display: block; }
 
@@ -142,6 +150,7 @@ select, input[type="number"], input[type="datetime-local"], textarea { font: inh
 </head>
 <body>
 <div id="stage"></div>
+<button id="timer" type="button" hidden></button>
 <div id="hud" aria-live="polite"></div>
 <div id="top">
   <button id="btn-reset" type="button">Reset</button>

@@ -28,8 +28,7 @@ const SPEED_MIN = 20;              // % (the slowest this sim runs)
 export const LESSONS = [
   { id: "1", title: "Slow upright piros", kind: "hover",
     summary: "Hover upright while the heli turns a slow, constant pirouette: one rotation a minute. The trainer flies collective and rudder; you fly the cyclic. Every correction must be made in whatever direction the heli is facing, so you can't cheat.",
-    goal: "Two sessions in a row, one CW and one CCW, with no crashes and the collective under your own control.",
-    tips: ["When nose-in, push the stick toward the side that is falling (“prop it up”).", "Nose left or right: push the stick toward the nose to bring the heli back to you."] },
+    goal: "Two sessions in a row, one CW and one CCW, with no crashes and the collective under your own control." },
   { id: "2", title: "Upright lazy 8s", kind: "play",
     summary: "Play-time lesson, started alongside Lesson 1. A lazy 8 is a left-to-right pass and back with a turn at each end, centred toward you. Work it up to a nose-leading 8.",
     goal: "Not logged. Smoother turns at the ends." },
@@ -38,12 +37,10 @@ export const LESSONS = [
     goal: "Not logged. A flip or roll in every direction that stays in the circle: you will need it for Lesson 4." },
   { id: "4", title: "Slow inverted piros", kind: "hover",
     summary: "The same slow pirouette, inverted. Flip or roll to inverted to start; if you wander out of the area, that is a crash. Sessions follow a six-step orientation cycle that mixes in upright piros at full speed.",
-    goal: "Two inverted sessions in a row, one CW and one CCW, with no crashes and your own collective.",
-    tips: ["Expect 50 crashes the first time. That's normal.", "Play time matters most here: this lesson is the hardest grind."] },
+    goal: "Two inverted sessions in a row, one CW and one CCW, with no crashes and your own collective." },
   { id: "5a", title: "8-point piros", kind: "hover",
     summary: "Now you fly the rudder. Turn in steps, stopping for at least a second at each of the 8 compass points (N, NE, E, …). Ten rotations a session, five each way. Alternate days: one inverted, one upright.",
-    goal: "Ten sessions running without a problem: five upright, five inverted.",
-    tips: ["A good time to start taking your real heli high and flipping to inverted."] },
+    goal: "Ten sessions running without a problem: five upright, five inverted." },
   { id: "5b", title: "Compass circles", kind: "practice",
     summary: "Hover at each compass point with the nose toward the centre, move into the centre, back out, then on to the next point. Once each CW and CCW, upright and inverted.",
     goal: "All four (CW/CCW, upright/inverted) cleanly." },
@@ -92,6 +89,14 @@ export const DEFAULT_SCHOOL = {
   override: null,  // { lesson?, orientation?, direction?, speed?, collAssist? } for the next session only
 };
 
+// The guide's crash limits are for its 15-minute session; shorter or longer sessions
+// scale them in proportion (rounded, so they stay whole crashes).
+export const BASE_MINUTES = 15;
+export function crashLimits(minutes = BASE_MINUTES) {
+  const k = (minutes > 0 ? minutes : BASE_MINUTES) / BASE_MINUTES;
+  return { slower: Math.round(7 * k), faster: Math.round(5 * k), halve: Math.round(50 * k) };
+}
+
 const clampSpeed = (v) => Math.max(SPEED_MIN, Math.min(100, Math.round(v)));
 const opposite = (d) => (d === "cw" ? "ccw" : "cw");
 
@@ -122,10 +127,11 @@ export function replay(log) {
     const L = st.lesson;
     if (L === "1" || (L === "4" && e.orientation === "inverted")) {
       const o = L === "1" ? st.up : st.inv;
+      const lim = crashLimits(e.minutes);
       if (e.crashes === 0 && e.collAssist && o.coll) { o.coll = false; st.notes.push("No crashes: you fly the collective from now on."); }
-      if (L === "4" && e.crashes > 50) { o.speed = Math.min(o.speed, 50); st.notes.push("Over 50 crashes: next inverted session at 50% speed."); }
-      else if (e.crashes > 7) { o.speed = clampSpeed(o.speed - 10); st.notes.push(`Over 7 crashes: speed down to ${o.speed}%.`); }
-      else if (e.crashes < 5 && o.speed < 100) { o.speed = clampSpeed(o.speed + 5); st.notes.push(`Under 5 crashes: speed up to ${o.speed}%.`); }
+      if (L === "4" && e.crashes > lim.halve) { o.speed = Math.min(o.speed, 50); st.notes.push(`Over ${lim.halve} crashes: next inverted session at 50% speed.`); }
+      else if (e.crashes > lim.slower) { o.speed = clampSpeed(o.speed - 10); st.notes.push(`Over ${lim.slower} crashes: speed down to ${o.speed}%.`); }
+      else if (e.crashes < lim.faster && o.speed < 100) { o.speed = clampSpeed(o.speed + 5); st.notes.push(`Under ${lim.faster} crashes: speed up to ${o.speed}%.`); }
       const clean = e.crashes === 0 && !e.collAssist;
       if (clean && st.clean && st.clean !== e.direction) {
         st.lesson = nextLessonId(L); st.clean = null; st.cycle = 0;
@@ -170,6 +176,31 @@ export function planNext(school) {
   }
   p.kind = lessonById(p.lesson).kind === "hover" ? "hover" : "free";
   return { plan: p, state: st };
+}
+
+/** How a lesson moves on, in words, for a session of `minutes`. */
+export function lessonRules(lesson, minutes = BASE_MINUTES) {
+  const { slower, faster, halve } = crashLimits(minutes);
+  const per = minutes === BASE_MINUTES ? "" : ` (the guide's limits for 15 min, scaled to your ${minutes}-min session)`;
+  const speed = `More than ${slower} crash${slower === 1 ? "" : "es"}: next session 10% slower. Fewer than ${faster}: 5% faster, up to 100%. In between: same speed${per}.`;
+  const coll = "Your first session with no crashes hands the collective to you for good.";
+  const pass = "Pass: two sessions in a row with no crashes and your own collective, one CW and one CCW.";
+  switch (lesson.id) {
+    case "1": return [
+      "The trainer flies collective and rudder (1 rotation a minute); you fly the cyclic. Direction alternates CW / CCW each session.",
+      speed, coll, "Leaving the area counts as a crash.", pass];
+    case "4": return [
+      "Sessions follow a 6-step cycle: inverted CW, inverted CCW, upright CW, inverted CW, inverted CCW, upright CCW. Upright steps are flown at full speed with your own collective.",
+      `Inverted sessions: ${speed} More than ${halve} crashes: straight down to 50%.`,
+      "The collective is handed to you after your first crash-free inverted session.", "Leaving the area counts as a crash.", pass.replace("two sessions", "two inverted sessions")];
+    case "5a": return [
+      "You fly everything, including the rudder. Stop at least 1 s on each of the 8 compass points; the next point lights up green.",
+      "Ten rotations a session, five each way. Sessions alternate inverted and upright.",
+      "A clean session: no crashes and the ten rotations counted. Any crash resets the run.",
+      "Pass: ten clean sessions in a row."];
+  }
+  if (lesson.kind === "play") return ["Play time: not logged and not part of the plan. Fly it after a training session."];
+  return ["Free flight: fly the exercise, log what you managed, and tick “passed” in the log entry when you meet the goal. That moves you to the next lesson."];
 }
 
 /** Trainer settings for a planned session. */

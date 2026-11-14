@@ -45,6 +45,7 @@ export class TouchSticks {
   }
 
   set visible(on) { this.root.hidden = !on; }
+  get visible() { return !this.root.hidden; }
 
   read() { return { ...this.values }; }
 }

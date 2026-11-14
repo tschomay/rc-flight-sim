@@ -4,7 +4,7 @@
 import { MODELS } from "../sim/models.js";
 import { COMPASS, lessonProgress } from "../sim/exercises.js";
 import { ORIENTATIONS } from "../sim/trainer.js";
-import { schoolTab, sessionEndCard, schoolChip } from "./school.js";
+import { schoolTab, sessionEndCard, schoolChip, mmss } from "./school.js";
 import { FUNCTIONS, SWITCHES, snapshot, firstGamepad, channelFromCaptures, readMapped } from "../input/gamepad.js";
 
 export const h = (tag, attrs = {}, ...kids) => {
@@ -61,13 +61,19 @@ export class UI {
       sheet: document.getElementById("sheet"),
       wizard: document.getElementById("wizard"),
       vrExit: document.getElementById("vr-exit"),
+      timer: document.getElementById("timer"),
     };
+    this.el.timer.addEventListener("click", () => { app.togglePause(); this.hudLast = 0; });
     document.getElementById("btn-menu").addEventListener("click", () => this.openSheet());
     document.getElementById("btn-reset").addEventListener("click", () => app.restart());
     document.getElementById("btn-vr").addEventListener("click", () => app.enterVR());
     const full = document.getElementById("btn-full");
     const root = document.documentElement;
-    if (!root.requestFullscreen && !root.webkitRequestFullscreen) full.hidden = true;  // iPhone Safari: add to home screen instead
+    // iPhone Safari has no full-screen API (add to home screen instead), and the installed
+    // app already runs full screen. Checked once at start: a tab in full screen can match
+    // the display-mode queries too.
+    const installed = navigator.standalone || ["fullscreen", "standalone", "minimal-ui"].some((m) => matchMedia(`(display-mode: ${m})`).matches);
+    if (installed || (!root.requestFullscreen && !root.webkitRequestFullscreen)) full.hidden = true;
     full.addEventListener("click", () => app.toggleFullscreen());
     document.addEventListener("fullscreenchange", () => { full.textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; });
     this.el.vrExit.addEventListener("click", () => app.exitVR());
@@ -103,6 +109,24 @@ export class UI {
   updateHud(now, heli, trainer, mode, source) {
     if (now - this.hudLast < 100) return;
     this.hudLast = now;
+    // during a training session only a small countdown shows; tapping it pauses and
+    // brings the rest back
+    const ss = this.app.session;
+    const focus = !!ss && !this.app.userPaused && this.el.sheet.hidden;
+    const low = !this.app.touch.visible;  // no touch sticks in the way: keep it out of view, bottom left
+    document.body.classList.toggle("focus", focus);
+    document.body.classList.toggle("session", !!ss);
+    document.body.classList.toggle("timer-low", !!ss && low);
+    const tm = this.el.timer;
+    tm.hidden = !ss;
+    if (ss) {
+      const left = mmss(Math.max(0, this.app.settings.school.sessionMinutes * 60 - ss.elapsed));
+      tm.textContent = this.app.userPaused ? `\u25B6 ${left} paused` : left;
+      tm.setAttribute("aria-label", this.app.userPaused ? `Paused, ${left} left. Resume` : `${left} left. Pause`);
+      tm.classList.toggle("paused", !!this.app.userPaused);
+      tm.classList.toggle("low", low);
+    }
+    if (focus) { this.el.hud.replaceChildren(...[this.waitPanel()].filter(Boolean)); return; }
     const tr = trainer.cfg.kind === "hover";
     const pct = trainer.timeTotal > 0 ? Math.round((100 * trainer.timeIn) / trainer.timeTotal) : 0;
     const label = { normal: "NORMAL", idle: "IDLE UP", hold: "HOLD" }[mode];
@@ -116,7 +140,7 @@ export class UI {
       h("span", { class: "chip dim" }, source),
     ];
     const score = tr ? h("div", { class: `score ${trainer.zone}` },
-      h("b", {}, { in: "In circle", edge: "Near the edge", out: "Outside" }[trainer.zone]),
+      h("b", {}, { in: "In circle", edge: "Drifting out", danger: "At the edge", out: "Outside" }[trainer.zone]),
       ` ${trainer.streak.toFixed(1)} s · best ${trainer.best.toFixed(1)} s · ${pct}% of ${Math.round(trainer.timeTotal)} s`) : null;
     let ex = null;
     if (trainer.cfg.pattern?.kind !== "none" || (tr && trainer.cfg.compass)) {
@@ -170,6 +194,7 @@ export class UI {
   closeSheet() {
     this.el.sheet.hidden = true;
     this.app.paused = false;
+    this.app.userPaused = false;
     clearInterval(this.monitorT);
   }
 
@@ -217,6 +242,7 @@ export class UI {
       seg("Counts as inside", [[0, "Any height"], [1, "±1 m"], [2, "±2 m"]], t.heightWindow ?? 0, (v) => { t.heightWindow = +v; this.changed("trainer"); }),
       toggle("Show the column above the circle", s.view.column, (v) => { s.view.column = v; this.changed("trainer"); }, "the ring on the ground always shows"),
       toggle("Leaving the circle is a crash", t.leaveIsCrash, set("leaveIsCrash"), "wander out and the heli resets"),
+      toggle("After a crash, carry on facing the same way", s.keepHeading, (v) => { s.keepHeading = v; this.changed("misc"); }, "the heli comes back pointing where it was, so a piro picks up where it left off. Also in flight school"),
       slider("Distance from you", 2, 12, 0.5, t.distance, set("distance", "trainer-restart"), fmt1("m")),
       slider("Trainer strength", 0, 1, 0.05, t.gain, set("gain"), (v) => (v < 0.35 ? "gentle" : v < 0.7 ? "normal" : "tight")),
       h("div", { class: "row" },
