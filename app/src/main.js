@@ -110,6 +110,10 @@ class App {
     if (!this.heli) this.heli = new Heli(def); else this.heli.setModel(def);
     if (this.mesh) this.scene.remove(this.mesh.root);
     this.mesh = new HeliMesh(def);
+    // a recording of another heli isn't this one's crash
+    this.lastCrash = null;
+    this.replay = null;
+    this.ui.setReplayButton(false);
     this.scene.add(this.mesh.root);
     this.refDistance = def.rotor.radius * 17;  // auto-zoom keeps apparent size like a 450 at 6 m
   }
@@ -144,6 +148,8 @@ class App {
     sun.shadow.mapSize.set(light ? 512 : 1024, light ? 512 : 1024);
     sun.shadow.map?.dispose();
     sun.shadow.map = null;
+    // the shadow filter is compiled into each material: recompile them for the new one
+    this.scene.traverse((o) => { for (const m of [o.material].flat()) if (m) m.needsUpdate = true; });
     this.resize();
   }
 
@@ -218,7 +224,7 @@ class App {
   toggleReplay() {
     if (this.replay) return this.stopReplay();
     if (!this.lastCrash?.length) return;
-    this.ui.closeSheet();
+    if (!this.ui.el.sheet.hidden) this.ui.closeSheet();  // keeps a session's pause, so Stop stays reachable
     this.replay = new Player(this.lastCrash, { speed: 0.5 });
     this.ui.hideToast();
   }
@@ -316,9 +322,11 @@ class App {
     // during a replay the mesh, camera and sound follow the recording instead of the sim
     let shown = this.heli, shownSpeed = this.paused ? 0 : dt * this.settings.timeScale / 100;
     if (this.replay) {
-      const f = this.replay.step(this.paused ? 0 : dt);
+      // a replay runs while a session is paused from its timer, but not under the settings sheet
+      const frozen = !this.ui.el.sheet.hidden;
+      const f = this.replay.step(frozen ? 0 : dt);
       shown = { ...f, def: this.heli.def, omegaNom: this.heli.omegaNom };
-      shownSpeed = this.paused ? 0 : dt * this.replay.speed;
+      shownSpeed = frozen ? 0 : dt * this.replay.speed;
       if (this.replay.done) this.stopReplay();
     }
     const hp = new THREE.Vector3(shown.pos.x, shown.pos.y, shown.pos.z);
@@ -326,7 +334,7 @@ class App {
     this.world.update(hp, this.wind.current);
     this.world.setZone(this.trainer.zone);
     if (this.trainer.cfg.compass) this.world.highlightCompass(this.trainer.exercise.nextPoint);
-    this.sound.update(shown, this.replay ? (this.paused ? 0 : this.replay.speed) : held ? 0 : this.settings.timeScale / 100);
+    this.sound.update(shown, this.replay ? (this.ui.el.sheet.hidden ? this.replay.speed : 0) : held ? 0 : this.settings.timeScale / 100);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {

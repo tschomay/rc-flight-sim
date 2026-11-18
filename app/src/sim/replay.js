@@ -7,7 +7,7 @@
 const FIELDS = ["omega", "thrust", "qMotor", "mode", "crashed"];
 
 export class Recorder {
-  constructor(seconds = 10, maxFrames = 1500) {
+  constructor(seconds = 10, maxFrames = 6000) {  // 10 s at 120 Hz and 20% sim speed
     this.seconds = seconds;
     this.buf = new Array(maxFrames);
     this.start = 0;

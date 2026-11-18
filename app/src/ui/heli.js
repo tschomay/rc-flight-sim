@@ -10,7 +10,7 @@ export const heliMethods = {
       s.rates = rates; s.expo.cyclic = cyc; s.expo.rudder = rud; this.changed("model"); this.openSheet("heli");
     } }, label);
     return [
-      seg("Helicopter", Object.entries(MODELS).map(([k, m]) => [k, m.name]), s.model, (v) => { s.model = v; this.changed("model"); }),
+      seg("Helicopter", Object.entries(MODELS).map(([k, m]) => [k, m.name]), s.model, (v) => { s.model = v; this.changed("model"); this.openSheet("heli"); }),
       h("p", { class: "hint" }, MODELS[s.model].blurb),
       h("fieldset", { class: "field" }, h("legend", {}, "Stick feel"),
         h("div", { class: "presets" },

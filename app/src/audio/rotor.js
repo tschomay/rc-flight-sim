@@ -48,10 +48,17 @@ export class RotorSound {
     this.ctx = null;
     this.volume = 0.6;
     this.enabled = true;
-    // browsers only start audio from a tap or key press
-    const unlock = () => { if (this.enabled) this.start(); };
-    addEventListener("pointerdown", unlock, { capture: true });
-    addEventListener("keydown", unlock, { capture: true });
+    // browsers only start audio from a tap or key press; iOS wants the end of the tap
+    const unlock = () => { if (this.enabled && !document.hidden) this.start(); };
+    for (const ev of ["pointerdown", "pointerup", "touchend", "click", "keydown"]) addEventListener(ev, unlock, { capture: true });
+    // no rotor drone from a backgrounded app or a locked phone
+    const vis = () => {
+      if (!this.ctx) return;
+      if (document.hidden || !this.enabled) this.ctx.suspend().catch(() => {});
+      else this.ctx.resume().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", vis);
+    addEventListener("pagehide", () => this.ctx?.suspend().catch(() => {}));
   }
 
   /** True when sound is on but the browser hasn't let it start yet (needs a tap). */
@@ -60,7 +67,8 @@ export class RotorSound {
   start() {
     const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
     if (!AC) return;
-    if (this.ctx) { if (this.ctx.state === "suspended") this.ctx.resume().catch(() => {}); return; }
+    // resume from "suspended" or iOS's "interrupted" (after a call or Siri)
+    if (this.ctx) { if (this.ctx.state !== "running" && this.ctx.state !== "closed") this.ctx.resume().catch(() => {}); return; }
     const ctx = this.ctx = new AC();
     const master = this.master = ctx.createGain();
     master.gain.value = 0;
@@ -94,13 +102,14 @@ export class RotorSound {
     this.noiseBuf = buf;
 
     for (const o of [this.blade, this.slap, this.motor, this.noise]) o.start();
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    if (ctx.state !== "running") ctx.resume().catch(() => {});
   }
 
   /** Follow the heli; `speed` is the sim speed (0 when paused), which also lowers the pitch. */
   update(heli, speed = 1) {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running") return;
+    if (!this.enabled) { ctx.suspend().catch(() => {}); return; }  // off: stop the graph, not just mute it
     const t = ctx.currentTime, k = 0.04;
     const on = this.enabled && speed > 0;
     const p = soundParams(heli);

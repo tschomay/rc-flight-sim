@@ -228,10 +228,11 @@ const FUNNELS = ["upright:nose-in", "upright:tail-in", "inverted:tail-in", "inve
 
 /** The ground pattern a lesson is flown on (school lessons only). */
 export function patternFor(lessonId) {
-  if (CIRCLE_CAT[lessonId] || lessonId === "11") return { kind: "circle" };
+  if (CIRCLE_CAT[lessonId] || lessonId === "11") return { kind: "circle", sequence: false };
+  // `sequence` is always set, so lesson 12's can't carry over into later flights
   if (lessonId === "12") return { kind: "eight", sequence: true };
-  if (["10", "11a"].includes(lessonId)) return { kind: "eight" };
-  return { kind: "none" };
+  if (["10", "11a"].includes(lessonId)) return { kind: "eight", sequence: false };
+  return { kind: "none", sequence: false };
 }
 
 /**

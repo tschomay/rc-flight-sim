@@ -136,3 +136,15 @@ test("progress: last sessions oldest first, with crashes and time in the circle"
   const back = progressSeries(parseImport(toCSV(log)).log, 30);
   assert.deepEqual(back, p);
 });
+
+test("lesson 12's sequence scoring doesn't carry over into other lessons' settings", async () => {
+  const { trainerFor } = await import("../src/school/school.js");
+  const { DEFAULT_TRAINER } = await import("../src/sim/trainer.js");
+  const l12 = trainerFor({ lesson: "12", kind: "free" }, fresh(), structuredClone(DEFAULT_TRAINER));
+  assert.equal(l12.pattern.sequence, true);
+  // e.g. the page reloaded mid lesson-12 session, so its settings are still current
+  for (const lesson of ["10", "11a", "6", "4"]) {
+    const t = trainerFor({ lesson, kind: lesson === "4" ? "hover" : "free" }, fresh(), l12);
+    assert.equal(t.pattern.sequence, false, `lesson ${lesson}`);
+  }
+});
