@@ -226,7 +226,7 @@ export function trainerFor(plan, school, base) {
 }
 
 /** A log entry for a finished session. */
-export function sessionEntry(plan, { startedAt, seconds, crashes, outOfArea }) {
+export function sessionEntry(plan, { startedAt, seconds, crashes, outOfArea, inCircle = null }) {
   return {
     type: "session",
     id: `s${startedAt}`,
@@ -238,10 +238,26 @@ export function sessionEntry(plan, { startedAt, seconds, crashes, outOfArea }) {
     speed: plan.speed,
     crashes,
     outOfArea,
+    inCircle,             // % of the flying time inside the hover circle (hover lessons)
     collAssist: plan.collAssist,
     rudderAssist: plan.rudderAssist,
     notes: "",
   };
+}
+
+/**
+ * The last `n` training sessions for the progress charts, oldest first: crashes and
+ * (for hover sessions that recorded it) the % of time inside the circle.
+ */
+export function progressSeries(log, n = 30) {
+  return log.filter((e) => e.type === "session").slice(-n).map((e, i) => ({
+    i,
+    date: e.date,
+    lesson: e.lesson,
+    minutes: e.minutes,
+    crashes: Number.isFinite(+e.crashes) ? +e.crashes : 0,
+    inCircle: e.inCircle == null || e.inCircle === "" || !Number.isFinite(+e.inCircle) ? null : +e.inCircle,
+  }));
 }
 
 /** Minutes of rest still owed before the next training session (0 when rested). */
@@ -263,7 +279,7 @@ export function dailyStatus(school, now = new Date()) {
 }
 
 export function toCSV(log) {
-  const cols = ["type", "id", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "collAssist", "rudderAssist", "notes", "tally"];
+  const cols = ["type", "id", "date", "minutes", "lesson", "orientation", "direction", "speed", "crashes", "outOfArea", "inCircle", "collAssist", "rudderAssist", "notes", "tally"];
   const q = (v) => (v == null ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
   const val = (e, c) => (c === "tally" && e.tally ? JSON.stringify(e.tally) : e[c]);
   return [cols.join(","), ...log.map((e) => cols.map((c) => q(val(e, c))).join(","))].join("\n");

@@ -23,6 +23,7 @@ export const DEFAULTS = {
   keepHeading: true,                  // hover trainer: after a crash, restart facing the way the heli was
   school: DEFAULT_SCHOOL,
   backup: { token: "", auto: true, lastAt: null, lastError: null },
+  tuning: {},                         // per heli: { "rotor.hubStiffness": 22, ... } over models.js
   sound: { on: true, volume: 60 },     // %
   timeScale: 100,                     // % of real time the sim runs at
 };
