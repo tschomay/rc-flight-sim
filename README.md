@@ -10,11 +10,11 @@ A phone-based RC helicopter training simulator: flown with a real Spektrum DX6i 
 cd app
 npm install
 npm run dev     # builds and serves http://localhost:8080, rebuilding on change
-npm test        # flight-model and trainer checks
+npm test        # flight-model, trainer, school, sound and build checks (CI runs these on every PR)
 npm run build   # dist/index.html (one self-contained file) + manifest and icon
 ```
 
-The phone needs the app served over **HTTPS** for motion sensors (VR head tracking) and installing to the home screen. Any static host works: upload `app/dist/`.
+The phone needs the app served over **HTTPS** for motion sensors (VR head tracking), installing to the home screen, and offline use. Any static host works: upload `app/dist/`. Once opened over HTTPS, a service worker keeps a copy, so the app opens at the field with no signal (it picks up a new deploy the next time there's a connection).
 
 Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, R reset, [ and ] sim speed.
 
@@ -33,6 +33,8 @@ Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, 
 - **Flight modes:** Normal, Idle up (symmetric ±12° for inverted), Hold. Set from TX switches or on-screen buttons.
 - **Views:** flat, which follows the heli with auto-zoom; Cardboard stereo with lens correction and head tracking (or without, following the heli); side-by-side without lens correction; red/cyan anaglyph; WebXR when the phone offers it.
 - **Wind:** speed, direction, gusts. A windsock shows it.
+- **Sound:** synthesised rotor, motor and wash that follow headspeed and rotor load, so a bog, a punch or a spool-down is heard; quieter and panned with distance. Tap once to start it (browsers need a tap before playing sound).
+- **Graphics:** Full or Light (normal resolution, simpler shadow) for slower phones and Cardboard. If the phone can't keep the physics at full speed, a "sim % of real time" chip says so.
 
 ## Docs
 
@@ -51,4 +53,4 @@ Use an ACRO (airplane) model memory for the sim: channels 1–4 come through as 
 
 1. Fly the flight school on the phone with the DX6i in an ACRO memory; check the session rules feel right.
 2. Tune feel against the real heli in `app/src/sim/models.js` (see docs/physics.md "Model parameters"), and re-run `npm test`.
-3. Ideas: sound, crash replay, a lighter phone render mode, scoring for lesson 12's full sequence.
+3. Ideas: crash replay, scoring for lesson 12's full sequence.

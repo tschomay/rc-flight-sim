@@ -19,6 +19,8 @@ import { UI } from "./ui/ui.js";
 import { planNext, trainerFor, sessionEntry } from "./school/school.js";
 import { mergeLogs, cloudLoad, cloudSave, looksLikeToken } from "./school/backup.js";
 import { DEFAULTS } from "./ui/settings.js";
+import { RotorSound } from "./audio/rotor.js";
+import { Pace } from "./sim/pace.js";
 
 const DT = 0.001;
 const expo = (x, p) => (1 - p) * x + p * x * x * x;
@@ -53,6 +55,8 @@ class App {
     this.acc = 0;
     this.prevReset = false;
     this.crashAt = 0;
+    this.sound = new RotorSound();
+    this.pace = new Pace();
 
     this.ui = new UI(this);
     this.applyModel();
@@ -82,6 +86,7 @@ class App {
     this.last = performance.now();
     this.renderer.setAnimationLoop((t, frame) => this.frame(t, frame));
     if (this.settings.backup.auto) this.cloudSync();
+    registerServiceWorker();
   }
 
   /** The model definition with the user's rate scaling applied. */
@@ -115,6 +120,26 @@ class App {
     this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
     this.world.setPattern(s.trainer.pattern);
     this.world.setCompass(s.trainer, s.trainer.kind === "hover" && s.trainer.compass);
+    this.sound.enabled = s.sound.on;
+    this.sound.volume = s.sound.volume / 100;
+    this.applyQuality();
+  }
+
+  /**
+   * Light graphics for slower phones (and Cardboard, which draws everything twice): no
+   * high-DPI rendering and a smaller, hard-edged shadow. The shadow itself stays: under
+   * the heli it's the best height cue there is.
+   */
+  applyQuality() {
+    const light = this.settings.view.quality === "light";
+    if (this.quality === light) return;
+    this.quality = light;
+    const sun = this.world.sun;
+    this.renderer.shadowMap.type = light ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    sun.shadow.mapSize.set(light ? 512 : 1024, light ? 512 : 1024);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+    this.resize();
   }
 
   saveAndApply(what) {
@@ -264,7 +289,8 @@ class App {
 
   resize() {
     const w = innerWidth, h = innerHeight;
-    const pr = Math.min(devicePixelRatio, this.view === "cardboard" ? 1.6 : 2);
+    const cap = this.settings.view.quality === "light" ? 1 : this.view === "cardboard" ? 1.6 : 2;
+    const pr = Math.min(devicePixelRatio, cap);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h);
     this.flat.resize(w, h);
@@ -305,7 +331,8 @@ class App {
 
   frame(t) {
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const real = (now - this.last) / 1000;
+    const dt = Math.min(0.05, real);
     this.last = now;
     const { sticks, source } = this.readInput(dt);
 
@@ -326,12 +353,14 @@ class App {
         this.acc -= DT; n++;
       }
       if (n === 60) this.acc = 0;
+      this.pace.sample(real, real * this.settings.timeScale / 100, n * DT);
     }
 
     if (this.heli.crashed) {
       if (!this.crashAt) {
         this.crashAt = now;
         this.trainer.crashes++;
+        this.sound.crash();
         if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
         this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : this.session ? " — tap the timer, then Reset" : " — tap Reset"}`, 0);
       } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart({ auto: true });
@@ -342,6 +371,7 @@ class App {
     this.world.update(hp, this.wind.current);
     this.world.setZone(this.trainer.zone);
     if (this.trainer.cfg.compass) this.world.highlightCompass(this.trainer.exercise.nextPoint);
+    this.sound.update(this.heli, held ? 0 : this.settings.timeScale / 100);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {
@@ -420,6 +450,18 @@ class App {
     this.wakeLock?.release?.().catch(() => {});
     this.resize();
   }
+}
+
+/**
+ * Offline support. Only where the page came from a real web server with its manifest (the
+ * artifact build has none and can't host a worker); localhost is skipped too, so the dev
+ * server always shows the latest build.
+ */
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
+  if (!document.querySelector('link[rel="manifest"]')) return;
+  const go = () => navigator.serviceWorker.register("sw.js").catch(() => { /* offline support is optional */ });
+  if (document.readyState === "complete") go(); else addEventListener("load", go, { once: true });
 }
 
 window.app = new App();

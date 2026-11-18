@@ -136,6 +136,8 @@ export class UI {
       h("span", { class: "chip" }, `${heli.height.toFixed(1)} m`),
       heli.inverted ? h("span", { class: "chip inv" }, "INVERTED") : null,
       this.app.settings.timeScale < 100 ? h("span", { class: "chip slow" }, `${this.app.settings.timeScale}% speed`) : null,
+      this.app.pace.slow ? h("span", { class: "chip warn", title: "The phone can't keep the physics at full speed" }, `sim ${Math.round(this.app.pace.ratio * 100)}% of real time${this.app.settings.view.quality === "light" ? "" : " \u2014 try Light graphics"}`) : null,
+      this.app.sound.blocked ? h("span", { class: "chip dim" }, "tap for sound") : null,
       schoolChip(this.app),
       h("span", { class: "chip dim" }, source),
     ];
@@ -176,7 +178,7 @@ export class UI {
     const old = !sheet.hidden && tab === this.tab ? sheet.querySelector(".sheet-body") : null;
     const keep = old && { top: old.scrollTop, open: [...old.querySelectorAll("details")].map((d) => d.open) };
     this.tab = tab;
-    const tabs = [["train", "Training"], ["school", "Flight school"], ["heli", "Helicopter"], ["tx", "Transmitter"], ["view", "View & wind"]];
+    const tabs = [["train", "Training"], ["school", "Flight school"], ["heli", "Helicopter"], ["tx", "Transmitter"], ["view", "View & sound"]];
     const body = h("div", { class: "sheet-body" }, this[`tab_${tab}`](s));
     sheet.replaceChildren(
       h("div", { class: "sheet-head" },
@@ -337,6 +339,10 @@ export class UI {
     const lens = s.view.lens;
     const setL = (k) => (v) => { lens[k] = v; this.changed("view"); };
     return [
+      seg("Graphics", [["full", "Full"], ["light", "Light"]], s.view.quality, (v) => { s.view.quality = v; this.changed("view"); }),
+      h("p", { class: "hint" }, "Light renders at normal resolution with a simpler shadow: smoother on slower phones and in Cardboard, which draws everything twice. If a \u201csim % of real time\u201d chip appears while flying, the phone is falling behind and the heli is flying slower than it should; switch to Light."),
+      toggle("Sound", s.sound.on, (v) => { s.sound.on = v; this.changed("view"); }, "rotor, motor and wash, following headspeed and load: you hear a bog or a spool-down before you see it"),
+      slider("Volume", 0, 100, 5, s.sound.volume, (v) => { s.sound.volume = v; this.changed("view"); }, (v) => `${v}%`),
       slider("Field of view", 20, 60, 1, s.view.fov, (v) => { s.view.fov = v; this.changed("view"); }, (v) => `${v}°`),
       toggle("Auto-zoom", s.view.autoZoom, (v) => { s.view.autoZoom = v; this.changed("view"); }, "narrows the view as the heli gets farther away"),
       seg("3D button", [["cardboard", "Cardboard / VR"], ["plain", "Side by side, no lenses"], ["anaglyph", "Red/cyan glasses"]], s.view.stereo, (v) => { s.view.stereo = v; this.changed("view"); }),
