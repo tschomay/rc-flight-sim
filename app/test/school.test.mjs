@@ -115,3 +115,36 @@ test("backup: merging keeps both sides, newest edit wins, deletions stick", asyn
   assert.deepEqual(back, log);
   assert.equal(mergeLogs({ log, deleted: [] }, { log: back, deleted: [] }).log.length, 1, "re-importing your own export doesn't double it");
 });
+
+test("progress: last sessions oldest first, with crashes and time in the circle", async () => {
+  const { progressSeries, toCSV } = await import("../src/school/school.js");
+  const { parseImport } = await import("../src/school/backup.js");
+  const log = [];
+  for (let i = 0; i < 40; i++) {
+    log.push(sessionEntry({ lesson: i < 35 ? "4" : "5", orientation: "upright", direction: "cw", speed: 100, collAssist: false, rudderAssist: true },
+      { startedAt: Date.UTC(2026, 1, 1) + i * 3600000, seconds: 900, crashes: 40 - i, outOfArea: 0, inCircle: i % 2 ? 50 + i : null }));
+    if (i === 10) log.push({ type: "jump", id: "j1", lesson: "4", date: log[log.length - 1].date });
+  }
+  const p = progressSeries(log, 30);
+  assert.equal(p.length, 30, "jumps aren't sessions");
+  assert.equal(p[0].crashes, 30);
+  assert.equal(p[29].crashes, 1);
+  assert.equal(p[29].lesson, "5");
+  assert.equal(p[0].inCircle, null);
+  assert.equal(p[1].inCircle, 61);
+  // the new column survives a CSV export and import
+  const back = progressSeries(parseImport(toCSV(log)).log, 30);
+  assert.deepEqual(back, p);
+});
+
+test("lesson 12's sequence scoring doesn't carry over into other lessons' settings", async () => {
+  const { trainerFor } = await import("../src/school/school.js");
+  const { DEFAULT_TRAINER } = await import("../src/sim/trainer.js");
+  const l12 = trainerFor({ lesson: "12", kind: "free" }, fresh(), structuredClone(DEFAULT_TRAINER));
+  assert.equal(l12.pattern.sequence, true);
+  // e.g. the page reloaded mid lesson-12 session, so its settings are still current
+  for (const lesson of ["10", "11a", "6", "4"]) {
+    const t = trainerFor({ lesson, kind: lesson === "4" ? "hover" : "free" }, fresh(), l12);
+    assert.equal(t.pattern.sequence, false, `lesson ${lesson}`);
+  }
+});

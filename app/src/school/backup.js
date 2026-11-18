@@ -37,7 +37,7 @@ export function backupData(settings) {
 export function exportJSON(settings) { return JSON.stringify(backupData(settings), null, 1); }
 export { toCSV };
 
-const NUM = ["minutes", "speed", "crashes", "outOfArea"];
+const NUM = ["minutes", "speed", "crashes", "outOfArea", "inCircle"];
 const BOOL = ["collAssist", "rudderAssist"];
 
 /** Parse a CSV written by toCSV (quoted fields, embedded commas, quotes and newlines). */

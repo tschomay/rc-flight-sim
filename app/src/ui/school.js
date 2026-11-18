@@ -2,9 +2,10 @@
 // Every value the course suggests can be changed: the next session through an override,
 // past sessions by editing the log (the plan re-derives from it), the lesson by a jump.
 
-import { h, seg, toggle, slider, radii } from "./ui.js";
+import { h, seg, toggle, slider, radii } from "./dom.js";
 import { CREDIT, LESSONS, lessonById, planNext, restLeft, dailyStatus, toCSV, nextLessonId, lessonRules } from "../school/school.js";
 import { lessonProgress } from "../sim/exercises.js";
+import { progressCharts } from "./progress.js";
 import { entryKey, exportJSON, parseImport, mergeLogs, looksLikeToken } from "../school/backup.js";
 
 const DIRS = [["ccw", "CCW"], ["cw", "CW"], ["both", "Both"]];
@@ -87,6 +88,7 @@ export function schoolTab(ui, s) {
 
   // ---- log ----
   const rows = [...sc.log].map((e, i) => [e, i]).reverse();
+  out.push(progressCharts(sc.log));
   out.push(h("h2", {}, "Log"),
     rows.length ? h("div", { class: "log" }, rows.map(([e, i]) => logRow(ui, sc, e, i))) : h("p", { class: "hint" }, "Sessions you finish are logged here automatically. Tap one to edit it."),
     h("div", { class: "row" },

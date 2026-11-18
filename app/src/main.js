@@ -3,9 +3,9 @@
 // per frame (the display rate, 60–120 Hz).
 
 import * as THREE from "three";
-import { AnaglyphEffect } from "three/examples/jsm/effects/AnaglyphEffect.js";
 import { Heli } from "./sim/heli.js";
 import { MODELS } from "./sim/models.js";
+import { applyTuning } from "./sim/tuning.js";
 import { Trainer, selfLevel } from "./sim/trainer.js";
 import { Wind } from "./sim/wind.js";
 import { buildWorld } from "./render/world.js";
@@ -16,9 +16,12 @@ import { TouchSticks } from "./input/touch.js";
 import { Keyboard } from "./input/keyboard.js";
 import { loadSettings, saveSettings } from "./ui/settings.js";
 import { UI } from "./ui/ui.js";
-import { planNext, trainerFor, sessionEntry } from "./school/school.js";
-import { mergeLogs, cloudLoad, cloudSave, looksLikeToken } from "./school/backup.js";
-import { DEFAULTS } from "./ui/settings.js";
+import { cloudMethods } from "./app/cloud.js";
+import { sessionMethods } from "./app/session.js";
+import { viewMethods } from "./app/views.js";
+import { RotorSound } from "./audio/rotor.js";
+import { Pace } from "./sim/pace.js";
+import { Recorder, Player } from "./sim/replay.js";
 
 const DT = 0.001;
 const expo = (x, p) => (1 - p) * x + p * x * x * x;
@@ -53,6 +56,12 @@ class App {
     this.acc = 0;
     this.prevReset = false;
     this.crashAt = 0;
+    this.sound = new RotorSound();
+    this.pace = new Pace();
+    this.recorder = new Recorder(10);
+    this.simClock = 0;        // s of sim time flown, for the recorder
+    this.lastCrash = null;    // frames leading up to the last crash
+    this.replay = null;       // a Player while a crash replay runs
 
     this.ui = new UI(this);
     this.applyModel();
@@ -82,12 +91,13 @@ class App {
     this.last = performance.now();
     this.renderer.setAnimationLoop((t, frame) => this.frame(t, frame));
     if (this.settings.backup.auto) this.cloudSync();
+    registerServiceWorker();
   }
 
   /** The model definition with the user's rate scaling applied. */
   modelDef() {
     const s = this.settings;
-    const def = structuredClone(MODELS[s.model]);
+    const def = applyTuning(MODELS[s.model], s.tuning[s.model]);
     if (s.bladeColor === "white") def.look.blade = 0xf4f4f0;
     if (s.idlePitch) def.pitch.idle = def.pitch.hold = [-s.idlePitch, s.idlePitch];
     const k = this.settings.rates / 100;
@@ -100,6 +110,10 @@ class App {
     if (!this.heli) this.heli = new Heli(def); else this.heli.setModel(def);
     if (this.mesh) this.scene.remove(this.mesh.root);
     this.mesh = new HeliMesh(def);
+    // a recording of another heli isn't this one's crash
+    this.lastCrash = null;
+    this.replay = null;
+    this.ui.setReplayButton(false);
     this.scene.add(this.mesh.root);
     this.refDistance = def.rotor.radius * 17;  // auto-zoom keeps apparent size like a 450 at 6 m
   }
@@ -115,59 +129,37 @@ class App {
     this.world.setTarget(s.trainer, s.trainer.kind === "hover", s.view.column);
     this.world.setPattern(s.trainer.pattern);
     this.world.setCompass(s.trainer, s.trainer.kind === "hover" && s.trainer.compass);
+    this.sound.enabled = s.sound.on;
+    this.sound.volume = s.sound.volume / 100;
+    this.applyQuality();
+  }
+
+  /**
+   * Light graphics for slower phones (and Cardboard, which draws everything twice): no
+   * high-DPI rendering and a smaller, hard-edged shadow. The shadow itself stays: under
+   * the heli it's the best height cue there is.
+   */
+  applyQuality() {
+    const light = this.settings.view.quality === "light";
+    if (this.quality === light) return;
+    this.quality = light;
+    const sun = this.world.sun;
+    this.renderer.shadowMap.type = light ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    sun.shadow.mapSize.set(light ? 512 : 1024, light ? 512 : 1024);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+    // the shadow filter is compiled into each material: recompile them for the new one
+    this.scene.traverse((o) => { for (const m of [o.material].flat()) if (m) m.needsUpdate = true; });
+    this.resize();
   }
 
   saveAndApply(what) {
     saveSettings(this.settings);
     if (what === "school") this.scheduleBackup();
     if (what === "model") { this.applyModel(); this.applyAll(); this.restart(); return; }
+    if (what === "tune") { this.heli.setModel(this.modelDef()); return; }  // live: the heli keeps flying
     this.applyAll();
     if (what === "trainer-restart") this.restart();
-  }
-
-  // ---------- backup ----------
-  scheduleBackup() {
-    const b = this.settings.backup;
-    if (!b.auto || !looksLikeToken(b.token)) return;
-    clearTimeout(this.backupT);
-    this.backupT = setTimeout(() => this.cloudSync(), 4000);
-  }
-
-  /** Merge the cloud log into ours, save locally, then write the merged copy back. */
-  async cloudSync({ manual = false, restoreSettings = false } = {}) {
-    const s = this.settings, b = s.backup;
-    if (!looksLikeToken(b.token) || this.syncing) return;
-    this.syncing = true;
-    try {
-      const remote = await cloudLoad(b.token);
-      if (remote?.settings?.school) {
-        const before = JSON.stringify(s.school.log);
-        Object.assign(s.school, mergeLogs(s.school, remote.settings.school));
-        if (restoreSettings) this.restoreSettings(remote.settings);
-        if (JSON.stringify(s.school.log) !== before || restoreSettings) { saveSettings(s); this.applyAll(); }
-      } else if (restoreSettings) this.ui.toast("No cloud backup yet", 2000);
-      await cloudSave(b.token, s);
-      b.lastAt = new Date().toISOString();
-      b.lastError = null;
-      if (manual) this.ui.toast(restoreSettings ? "Restored from the cloud" : "Backed up", 1600);
-    } catch (e) {
-      b.lastError = e.message || "failed";
-      if (manual) this.ui.toast(`Backup failed: ${b.lastError}`, 3500);
-    } finally {
-      this.syncing = false;
-      saveSettings(s);
-    }
-  }
-
-  /** Take settings from a backup, keeping this device's cloud token and the merged log. */
-  restoreSettings(from) {
-    const s = this.settings;
-    const keep = { backup: s.backup, school: s.school };
-    for (const k of Object.keys(DEFAULTS)) if (k in from) s[k] = structuredClone(from[k]);
-    Object.assign(s, keep);
-    s.school = { ...from.school, log: keep.school.log, deleted: keep.school.deleted };
-    saveSettings(s);
-    this.applyModel(); this.applyAll(); this.restart();
   }
 
   /** Pause or resume from the session timer. */
@@ -189,42 +181,6 @@ class App {
     this.ui.toast(`Sim speed ${this.settings.timeScale}%`, 900);
   }
 
-  // ---------- flight school sessions ----------
-  startSession() {
-    const s = this.settings;
-    const { plan } = planNext(s.school);
-    s.school.override = null;  // an override is for one session
-    // restarting mid-session keeps the settings from before the first one
-    const prev = this.session?.prev || { trainer: structuredClone(s.trainer), timeScale: s.timeScale };
-    this.session = { plan, startedAt: Date.now(), elapsed: 0, crashes: 0, outOfArea: 0, prev };
-    s.trainer = trainerFor(plan, s.school, s.trainer);
-    s.timeScale = plan.speed;
-    saveSettings(s);
-    this.applyAll();
-    this.trainer.resetScore();
-    this.restart();
-  }
-
-  /** Stop the session and hand the draft log entry to the UI to confirm or edit. */
-  endSession() {
-    const ss = this.session;
-    if (!ss) return;
-    this.session = null;
-    this.userPaused = false;
-    const s = this.settings;
-    const entry = sessionEntry(ss.plan, { startedAt: ss.startedAt, seconds: ss.elapsed, crashes: ss.crashes, outOfArea: ss.outOfArea });
-    // log what was actually flown, in case settings were changed mid-session
-    entry.speed = s.timeScale;
-    if (ss.plan.kind === "hover") { entry.collAssist = s.trainer.assist.collective; entry.rudderAssist = s.trainer.assist.rudder; }
-    const ex = this.trainer.exercise;
-    if (s.trainer.pattern?.kind !== "none" || s.trainer.compass) { entry.tally = ex.tally(); entry.notes = ex.summary(); }
-    s.trainer = ss.prev.trainer;
-    s.timeScale = ss.prev.timeScale;
-    saveSettings(s);
-    this.applyAll();
-    this.ui.sessionEnded(entry);
-  }
-
   /**
    * Respawn the heli. In the hover trainer the sim then holds still until the pilot is on
    * the sticks: any throttle movement when the trainer flies the collective, or the stick
@@ -238,6 +194,8 @@ class App {
     const keep = this.heli.crashed && this.settings.keepHeading && c.kind === "hover" &&
       (c.rotation === "cw" || c.rotation === "ccw" || !c.assist.rudder);
     this.crashAt = 0;
+    this.replay = null;
+    this.recorder.clear();
     this.ui.hideToast();
     this.trainer.start(this.heli, this.mode, { heading: keep ? this.heli.heading : null });
     if (c.kind === "hover") this.mode = "idle";
@@ -262,9 +220,25 @@ class App {
     if (w.done) { this.waiting = null; this.ui.toast("You have control", 1000); }
   }
 
+  /** Play back the seconds before the last crash, at half speed; again to stop. */
+  toggleReplay() {
+    if (this.replay) return this.stopReplay();
+    if (!this.lastCrash?.length) return;
+    if (!this.ui.el.sheet.hidden) this.ui.closeSheet();  // keeps a session's pause, so Stop stays reachable
+    this.replay = new Player(this.lastCrash, { speed: 0.5 });
+    this.ui.hideToast();
+  }
+
+  /** End the replay and fly again from a fresh start. */
+  stopReplay() {
+    this.replay = null;
+    this.restart();
+  }
+
   resize() {
     const w = innerWidth, h = innerHeight;
-    const pr = Math.min(devicePixelRatio, this.view === "cardboard" ? 1.6 : 2);
+    const cap = this.settings.view.quality === "light" ? 1 : this.view === "cardboard" ? 1.6 : 2;
+    const pr = Math.min(devicePixelRatio, cap);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h);
     this.flat.resize(w, h);
@@ -305,12 +279,13 @@ class App {
 
   frame(t) {
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const real = (now - this.last) / 1000;
+    const dt = Math.min(0.05, real);
     this.last = now;
     const { sticks, source } = this.readInput(dt);
 
-    if (this.waiting && !this.paused) this.checkHandover(sticks);
-    const held = this.paused || !!this.waiting;
+    if (this.waiting && !this.paused && !this.replay) this.checkHandover(sticks);
+    const held = this.paused || !!this.waiting || !!this.replay;
     if (this.session && !held) {
       this.session.elapsed += dt;
       if (this.session.elapsed >= this.settings.school.sessionMinutes * 60) { this.ui.toast("Session complete", 2000); this.endSession(); }
@@ -326,22 +301,40 @@ class App {
         this.acc -= DT; n++;
       }
       if (n === 60) this.acc = 0;
+      this.pace.sample(real, real * this.settings.timeScale / 100, n * DT);
+      this.simClock += n * DT;
+      if (!this.crashAt) this.recorder.record(this.heli, this.simClock);  // up to and including the crash
     }
 
     if (this.heli.crashed) {
       if (!this.crashAt) {
         this.crashAt = now;
         this.trainer.crashes++;
+        this.sound.crash();
+        this.lastCrash = this.recorder.frames();
+        this.lastCrashReason = this.heli.crashed;
+        this.ui.setReplayButton(true);
         if (this.session) { this.session.crashes++; if (this.heli.crashed === "Left the circle") this.session.outOfArea++; }
         this.ui.toast(`${this.heli.crashed}${this.settings.autoReset ? " — resetting" : this.session ? " — tap the timer, then Reset" : " — tap Reset"}`, 0);
-      } else if (this.settings.autoReset && now - this.crashAt > 1500) this.restart({ auto: true });
+      } else if (this.settings.autoReset && !this.replay && now - this.crashAt > 1500) this.restart({ auto: true });
     }
 
-    const hp = new THREE.Vector3(this.heli.pos.x, this.heli.pos.y, this.heli.pos.z);
-    this.mesh.update(this.heli, this.paused ? 0 : dt * this.settings.timeScale / 100);
+    // during a replay the mesh, camera and sound follow the recording instead of the sim
+    let shown = this.heli, shownSpeed = this.paused ? 0 : dt * this.settings.timeScale / 100;
+    if (this.replay) {
+      // a replay runs while a session is paused from its timer, but not under the settings sheet
+      const frozen = !this.ui.el.sheet.hidden;
+      const f = this.replay.step(frozen ? 0 : dt);
+      shown = { ...f, def: this.heli.def, omegaNom: this.heli.omegaNom };
+      shownSpeed = frozen ? 0 : dt * this.replay.speed;
+      if (this.replay.done) this.stopReplay();
+    }
+    const hp = new THREE.Vector3(shown.pos.x, shown.pos.y, shown.pos.z);
+    this.mesh.update(shown, shownSpeed);
     this.world.update(hp, this.wind.current);
     this.world.setZone(this.trainer.zone);
     if (this.trainer.cfg.compass) this.world.highlightCompass(this.trainer.exercise.nextPoint);
+    this.sound.update(shown, this.replay ? (this.ui.el.sheet.hidden ? this.replay.speed : 0) : held ? 0 : this.settings.timeScale / 100);
     this.ui.updateHud(now, this.heli, this.trainer, this.mode, source);
 
     if (this.renderer.xr.isPresenting) {
@@ -359,67 +352,20 @@ class App {
     }
   }
 
-  async toggleFullscreen() {
-    const root = document.documentElement;
-    try {
-      if (document.fullscreenElement || document.webkitFullscreenElement) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-      else await (root.requestFullscreen || root.webkitRequestFullscreen).call(root, { navigationUI: "hide" });
-    } catch { this.ui.toast("Full screen isn't available here"); }
-  }
+}
 
-  /** Red/cyan glasses: the flat view, HUD and sticks, rendered as an anaglyph. */
-  toggleAnaglyph() {
-    this.anaglyph ||= new AnaglyphEffect(this.renderer, innerWidth, innerHeight);
-    this.view = this.view === "anaglyph" ? "flat" : "anaglyph";
-    this.ui.setStereoButton(this.view === "anaglyph");
-    this.resize();
-  }
+Object.assign(App.prototype, cloudMethods, sessionMethods, viewMethods);
 
-  async enterVR() {
-    const s = this.settings;
-    if (s.view.stereo === "anaglyph" || this.view === "anaglyph") return this.toggleAnaglyph();
-    if (s.view.stereo === "cardboard" && s.view.vrMode === "auto" && navigator.xr && (await navigator.xr.isSessionSupported("immersive-vr").catch(() => false))) {
-      try {
-        const session = await navigator.xr.requestSession("immersive-vr", { optionalFeatures: ["local"] });
-        this.renderer.xr.enabled = true;
-        this.renderer.xr.setReferenceSpaceType("local");
-        this.scene.add(this.xrRig);
-        this.xrRig.add(this.flat.camera);
-        this.flat.camera.position.set(0, 0, 0);
-        await this.renderer.xr.setSession(session);
-        session.addEventListener("end", () => {
-          this.renderer.xr.enabled = false;
-          this.flat.camera.removeFromParent();
-          this.flat.camera.position.copy(EYE);
-          this.scene.remove(this.xrRig);
-          this.resize();
-        });
-        return;
-      } catch (e) {
-        console.warn("WebXR failed, using built-in Cardboard view", e);
-      }
-    }
-    this.view = "cardboard";
-    document.body.classList.add("vr");
-    if (!document.fullscreenElement) {
-      try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch { /* fullscreen optional */ }
-    }
-    try { await screen.orientation?.lock?.("landscape"); } catch { /* lock optional */ }
-    try { this.wakeLock = await navigator.wakeLock?.request("screen"); } catch { /* optional */ }
-    this.cardboard.start();
-    this.resize();
-    this.ui.toast(this.settings.view.headTracking ? "Tap once to centre the view, twice to reset" : "Tap twice to reset", 3000);
-  }
-
-  /** Back to the flat view. Full screen stays on: the Full screen button turns it off. */
-  exitVR() {
-    this.view = "flat";
-    document.body.classList.remove("vr");
-    this.cardboard.stop();
-    try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
-    this.wakeLock?.release?.().catch(() => {});
-    this.resize();
-  }
+/**
+ * Offline support. Only where the page came from a real web server with its manifest (the
+ * artifact build has none and can't host a worker); localhost is skipped too, so the dev
+ * server always shows the latest build.
+ */
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
+  if (!document.querySelector('link[rel="manifest"]')) return;
+  const go = () => navigator.serviceWorker.register("sw.js").catch(() => { /* offline support is optional */ });
+  if (document.readyState === "complete") go(); else addEventListener("load", go, { once: true });
 }
 
 window.app = new App();

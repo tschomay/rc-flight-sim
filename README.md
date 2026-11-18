@@ -10,11 +10,11 @@ A phone-based RC helicopter training simulator: flown with a real Spektrum DX6i 
 cd app
 npm install
 npm run dev     # builds and serves http://localhost:8080, rebuilding on change
-npm test        # flight-model and trainer checks
+npm test        # flight-model, trainer, school, sound and build checks (CI runs these on every PR)
 npm run build   # dist/index.html (one self-contained file) + manifest and icon
 ```
 
-The phone needs the app served over **HTTPS** for motion sensors (VR head tracking) and installing to the home screen. Any static host works: upload `app/dist/`.
+The phone needs the app served over **HTTPS** for motion sensors (VR head tracking), installing to the home screen, and offline use. Any static host works: upload `app/dist/`. Once opened over HTTPS, a service worker keeps a copy, so the app opens at the field with no signal (it picks up a new deploy the next time there's a connection).
 
 Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, R reset, [ and ] sim speed.
 
@@ -25,14 +25,19 @@ Desktop keys: W/S collective, A/D rudder, arrow keys cyclic, 1/2/3 flight mode, 
 - **Hover trainer:** pick which of collective, cyclic or rudder the trainer flies. Set the height, circle radius (0.5–3 m), which side faces you, upright or inverted, heading hold, rotate left or right at a set speed, or ±90° swing. Scores time in the circle (a column at any height, or a ±1/±2 m window); leaving it can count as a crash. One-tap presets: rotating hover, inverted hover, inverted rotating, nose-in.
 - **Hand-over:** each hover exercise starts paused until you move the throttle stick; when you fly the collective yourself (and after every crash reset), it waits until the stick reaches the hover position, shown on a gauge, so the heli isn't handed over with the throttle in the wrong place.
 - **Flight school (optional):** ArchmageAU's guide ["From tail-in to all 8s and funnels in 6 months"](https://www.helifreak.com/showthread.php?t=531380) (HeliFreak, 2013; a saved copy is in [docs/](docs/From%20tail-in%20to%20all%208s%20and%20funnels%20in%206%20months%20-%20HeliFreak.pdf)), built in with credit. Lessons 1–12, timed sessions, automatic crash counting, and the guide's log and session rules (speed up/down, alternate direction, hand over the collective, advance). The log is editable, the next session can be overridden, and the log exports as CSV.
-- **Automatic scoring:** ground outlines (circle or figure 8) count laps and 8s, labelled upright/inverted and forward/backward/nose-in/tail-in, so lessons 6–11a are scored and "passed" is suggested when the goal is met. Compass points on the hover circle score 8-point piros (lesson 5a).
+- **Automatic scoring:** ground outlines (circle or figure 8) count laps and 8s, labelled upright/inverted and forward/backward/nose-in/tail-in, so lessons 6–12 are scored and "passed" is suggested when the goal is met. Compass points on the hover circle score 8-point piros (lesson 5a). Lesson 12 tracks the full sequence in one flight: all six 8s, all four funnel 8s, and an upright and an inverted 8-point piro over the 8's crossing (a crash or landing starts a new flight; the order isn't checked).
+- **Progress charts:** crashes per session and time inside the hover circle for the last 30 sessions, in Flight school.
+- **Crash replay:** after a crash, "Replay crash" plays the last 10 seconds at half speed.
 - **Backup:** import/export CSV or full JSON, and optional automatic backup to your own Vercel Blob store (the read-write token is the password; see Flight school → Backup).
 - **Sim speed:** 20–100%, as the guide asks for.
 - **Stick feel:** Gentle/Sport/3D rate and expo presets, optional self-levelling (stability) mode.
+- **Tuning (advanced):** live sliders for mass, rotor, inertia, tail, motor and drag parameters per heli (Helicopter → Tuning), saved on the device, with a "Copy for models.js" export to make the values permanent.
 - **Inputs:** transmitter via the Gamepad API with a setup wizard (finds each stick and switch, any channel order or direction), on-screen mode 2 sticks, keyboard.
 - **Flight modes:** Normal, Idle up (symmetric ±12° for inverted), Hold. Set from TX switches or on-screen buttons.
 - **Views:** flat, which follows the heli with auto-zoom; Cardboard stereo with lens correction and head tracking (or without, following the heli); side-by-side without lens correction; red/cyan anaglyph; WebXR when the phone offers it.
 - **Wind:** speed, direction, gusts. A windsock shows it.
+- **Sound:** synthesised rotor, motor and wash that follow headspeed and rotor load, so a bog, a punch or a spool-down is heard; quieter and panned with distance. Tap once to start it (browsers need a tap before playing sound).
+- **Graphics:** Full or Light (normal resolution, simpler shadow) for slower phones and Cardboard. If the phone can't keep the physics at full speed, a "sim % of real time" chip says so.
 
 ## Docs
 
@@ -50,5 +55,5 @@ Use an ACRO (airplane) model memory for the sim: channels 1–4 come through as 
 ## Next steps
 
 1. Fly the flight school on the phone with the DX6i in an ACRO memory; check the session rules feel right.
-2. Tune feel against the real heli in `app/src/sim/models.js` (see docs/physics.md "Model parameters"), and re-run `npm test`.
-3. Ideas: sound, crash replay, a lighter phone render mode, scoring for lesson 12's full sequence.
+2. Tune feel against the real heli with Helicopter → Tuning, copy the values into `app/src/sim/models.js` (see docs/physics.md "Model parameters"), and update the hover baselines in `app/test/regression.test.mjs` if `npm test` flags them.
+3. Check the hands-off drift: with the sticks centred each heli drifts left (tail-rotor thrust) at about 2 m/s after 2 s. The direction is right for a clockwise rotor; whether the amount matches the real heli is a judgement for the sticks.

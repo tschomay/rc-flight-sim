@@ -42,6 +42,18 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .chip.mode-hold { border-color: var(--bad); color: var(--bad); }
 .chip.inv { border-color: var(--warn); color: var(--warn); }
 .chip.slow { border-color: #6fb6ff; color: #6fb6ff; }
+.chart { margin: 0; display: grid; gap: 4px; }
+.chart figcaption { font-size: 12px; color: var(--muted); }
+.progress { display: grid; gap: 10px; }
+svg.spark { width: 100%; height: auto; display: block; overflow: visible; }
+svg.spark .vbar { fill: #3d8fe0; }
+svg.spark .col:hover .vbar { fill: #5aa5f0; }
+svg.spark .hit { fill: transparent; }
+svg.spark .grid { stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+svg.spark .axis { stroke: rgba(255, 255, 255, 0.25); stroke-width: 1; }
+svg.spark .tick { fill: var(--muted); font: 9.5px var(--mono); }
+pre.export { margin: 0; padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; font: 11.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.chip.warn { border-color: var(--bad); color: var(--bad); }
 .score { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 6px; padding: 4px 10px; font: 12px/1.4 var(--mono); font-variant-numeric: tabular-nums; width: fit-content; }
 .score.in { border-left-color: var(--ok); } .score.out, .score.danger { border-left-color: var(--bad); }
 .score b { color: var(--warn); } .score.in b { color: var(--ok); } .score.out b, .score.danger b { color: var(--bad); }
@@ -153,6 +165,7 @@ select, input[type="number"], input[type="datetime-local"], textarea { font: inh
 <button id="timer" type="button" hidden></button>
 <div id="hud" aria-live="polite"></div>
 <div id="top">
+  <button id="btn-replay" type="button" hidden>Replay crash</button>
   <button id="btn-reset" type="button">Reset</button>
   <button id="btn-full" type="button" aria-label="Full screen">Full screen</button>
   <button id="btn-vr" type="button">3D</button>

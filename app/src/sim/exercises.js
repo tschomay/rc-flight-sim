@@ -13,6 +13,11 @@
 //
 // Piros: a stop is the heading held within 12° of a compass point for a second, at low yaw
 // rate, inside the hover circle. Eight stops in a row going the same way are a rotation.
+//
+// Lesson 12's sequence: every 8 and funnel 8, outward and inward, plus an upright and an
+// inverted 8-point piro (flown over the 8's crossing), all in one flight. A crash or a
+// landing starts a new flight. The order isn't checked: flying them all without coming
+// down is the hard part.
 
 import { v3, rot, wrapPi, DEG } from "./math.js";
 
@@ -21,6 +26,19 @@ export const DEFAULT_PATTERN = {
   radius: 5,      // m, each circle (or each lobe of the 8)
   distance: 16,   // m from the pilot to the pattern's centre
   band: 2.5,      // m either side of the outline that still counts
+  sequence: false, // lesson 12: track the full sequence in one flight
+};
+
+const EIGHTS = ["upright:forward", "upright:backward", "inverted:backward", "upright:funnel", "inverted:funnel"];
+/** Everything lesson 12 asks for in one flight. */
+export const SEQUENCE = [
+  ...EIGHTS.flatMap((k) => ["outward", "inward"].map((w) => `eight|${w}|${k}`)),
+  "piro|upright", "piro|inverted",
+];
+export const sequenceLabel = (key) => {
+  const [kind, a, b] = key.split("|");
+  if (kind === "piro") return `${a} 8-point piro`;
+  return `${a} ${b.endsWith(":funnel") ? `${b.split(":")[0]} funnel` : catLabel(b)} 8`;
 };
 
 export const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -89,6 +107,10 @@ export class ExerciseScorer {
     this.p = { ...DEFAULT_PATTERN, ...pattern };
     this.hover = hover;   // { center: v3, radius } when scoring compass piros
     const c = this.center;
+    // lesson 12: piros over the 8's crossing, scored without the hover trainer's circle
+    if (this.p.sequence && !hover) this.hover = { center: c, radius: 2, own: true };
+    this.flight = new Set();  // sequence items done since the last crash or landing
+    this.bestFlight = [];
     if (this.p.kind === "circle") this.lobes = [new LapTracker(c, this.p.radius, this.p.band)];
     else if (this.p.kind === "eight") this.lobes = [-1, 1].map((s) => new LapTracker(v3(c.x + s * this.p.radius, 0, c.z), this.p.radius, this.p.band));
     else this.lobes = [];
@@ -108,10 +130,23 @@ export class ExerciseScorer {
     this.run = this.run.key === key ? { key, n: this.run.n + 1 } : { key, n: 1 };
     this.runs[key] = Math.max(this.runs[key] || 0, this.run.n);
     this.last = key;
+    this.done(key);
+  }
+
+  /** Count a sequence item for this flight. */
+  done(key) {
+    if (!this.p.sequence || !SEQUENCE.includes(key)) return;
+    this.flight.add(key);
+    if (this.flight.size > this.bestFlight.length) this.bestFlight = [...this.flight];
   }
 
   update(heli, dt, { inside = false } = {}) {
     if (heli.crashed) { this.run = { key: null, n: 0 }; for (const l of this.lobes) l.reset(); this.lastLap = null; }
+    if ((heli.crashed || heli.onGround) && this.flight.size) this.flight = new Set();
+    if (this.hover?.own) {
+      const c = this.hover.center;
+      inside = !heli.onGround && Math.hypot(heli.pos.x - c.x, heli.pos.z - c.z) <= this.hover.radius;
+    }
     if (this.p.kind === "eight") {
       const c = this.center;
       if (Math.hypot(heli.pos.x - c.x, heli.pos.z - c.z) < 1.5 && Math.abs(heli.vel.z) > 0.5) this.cross = heli.vel.z < 0 ? "outward" : "inward";
@@ -150,6 +185,7 @@ export class ExerciseScorer {
     if (pr.seq.length >= 9) {  // back at the starting point: eight stops, one full turn
       pr[pr.dir]++;
       this.last = `piro|${pr.dir}`;
+      this.done(`piro|${heli.up.y < 0 ? "inverted" : "upright"}`);
       pr.seq = [k];
       pr.dir = null;
     }
@@ -171,11 +207,16 @@ export class ExerciseScorer {
       return `${label}: ${n} (best run ${this.runs[key]})`;
     });
     if (this.hover) parts.push(`8-point piros: ${this.piro.cw} CW, ${this.piro.ccw} CCW`);
+    if (this.p.sequence) parts.push(`Sequence: ${this.flight.size}/${SEQUENCE.length} this flight, best ${this.bestFlight.length}/${SEQUENCE.length}`);
     return parts.join("; ");
   }
 
   tally() {
-    return { counts: { ...this.counts }, runs: { ...this.runs }, ...(this.hover ? { piros: { cw: this.piro.cw, ccw: this.piro.ccw } } : {}) };
+    return {
+      counts: { ...this.counts }, runs: { ...this.runs },
+      ...(this.hover ? { piros: { cw: this.piro.cw, ccw: this.piro.ccw } } : {}),
+      ...(this.p.sequence ? { seq: { best: [...this.bestFlight], now: [...this.flight] } } : {}),
+    };
   }
 }
 
@@ -187,9 +228,11 @@ const FUNNELS = ["upright:nose-in", "upright:tail-in", "inverted:tail-in", "inve
 
 /** The ground pattern a lesson is flown on (school lessons only). */
 export function patternFor(lessonId) {
-  if (CIRCLE_CAT[lessonId] || lessonId === "11") return { kind: "circle" };
-  if (["10", "11a", "12"].includes(lessonId)) return { kind: "eight" };
-  return { kind: "none" };
+  if (CIRCLE_CAT[lessonId] || lessonId === "11") return { kind: "circle", sequence: false };
+  // `sequence` is always set, so lesson 12's can't carry over into later flights
+  if (lessonId === "12") return { kind: "eight", sequence: true };
+  if (["10", "11a"].includes(lessonId)) return { kind: "eight", sequence: false };
+  return { kind: "none", sequence: false };
 }
 
 /**
@@ -216,6 +259,12 @@ export function lessonProgress(lessonId, tally) {
     const kinds = ["upright", "inverted"].flatMap((o) => ["outward", "inward"].map((w) => `eight|${w}|${o}:funnel`));
     const have = kinds.map((k) => c[k] || 0);
     return { passed: have.every((x) => x >= 2), text: kinds.map((k, i) => `${k.split("|")[1]} ${k.split("|")[2].split(":")[0]} ${have[i]}/2`).join(", ") };
+  }
+  if (lessonId === "12") {
+    const best = tally?.seq?.best || [], now = tally?.seq?.now || [];
+    const left = SEQUENCE.filter((k) => !now.includes(k));
+    const next = left.length ? ` Still to fly this flight: ${left.slice(0, 3).map(sequenceLabel).join(", ")}${left.length > 3 ? ` and ${left.length - 3} more` : ""}.` : "";
+    return { passed: best.length === SEQUENCE.length, text: `Sequence in one flight: ${now.length}/${SEQUENCE.length} (best ${best.length}).${next}` };
   }
   if (lessonId === "5a") {
     const p = tally?.piros || { cw: 0, ccw: 0 };

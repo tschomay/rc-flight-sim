@@ -1,10 +1,11 @@
 // Bundles the app into dist/index.html (one self-contained file: works offline, from a
 // static host, or opened as an artifact) plus a web manifest so it installs to the home
-// screen. `node build.mjs --serve` rebuilds on change and serves on http://localhost:8080.
+// screen, and a service worker (src/sw.js) so it opens offline once visited. `node build.mjs --serve` rebuilds on change and serves on http://localhost:8080.
 
 import * as esbuild from "esbuild";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { watch } from "node:fs";
 
 const serve = process.argv.includes("--serve");
@@ -49,6 +50,9 @@ async function build() {
   writeFileSync("dist/artifact.html", fragment.trimStart());
   writeFileSync("dist/manifest.webmanifest", JSON.stringify(manifest, null, 2));
   writeFileSync("dist/icon.svg", icon);
+  // offline support: the service worker's cache is named after this build
+  const version = createHash("sha256").update(html).update(JSON.stringify(manifest)).update(icon).digest("hex").slice(0, 12);
+  writeFileSync("dist/sw.js", readFileSync("src/sw.js", "utf8").replace("__VERSION__", version));
   console.log(`built dist/index.html (${(html.length / 1024).toFixed(0)} KB)`);
 }
 
@@ -58,7 +62,7 @@ if (serve) {
   let t;
   watch("src", { recursive: true }, () => { clearTimeout(t); t = setTimeout(() => build().catch((e) => console.error(e.message)), 100); });
   watch("index.html", () => { clearTimeout(t); t = setTimeout(() => build().catch((e) => console.error(e.message)), 100); });
-  const types = { html: "text/html", webmanifest: "application/manifest+json", svg: "image/svg+xml" };
+  const types = { js: "text/javascript", html: "text/html", webmanifest: "application/manifest+json", svg: "image/svg+xml" };
   createServer((req, res) => {
     const path = req.url === "/" ? "index.html" : req.url.slice(1).split("?")[0];
     try {
