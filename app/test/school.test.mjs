@@ -42,6 +42,43 @@ test("lesson 1 → 4 after clean CW and CCW sessions with own collective", () =>
   assert.deepEqual([p.orientation, p.direction], L4_CYCLE[0]);
 });
 
+test("lesson 1: clean sessions below 100% speed don't pass", () => {
+  const s = fresh();
+  for (let i = 0; i < 3; i++) fly(s, 10);      // down to 70%
+  assert.equal(planNext(s).plan.speed, 70);
+  let p = fly(s, 0);     // hands over the collective even at 70%
+  assert.equal(p.collAssist, false);
+  assert.equal(p.speed, 75);
+  p = fly(s, 0);         // clean, own collective, 75%: doesn't count
+  assert.match(replay(s.log).notes.join(" "), /only sessions at 100%/);
+  for (let i = 0; i < 4; i++) p = fly(s, 0);   // 80, 85, 90, 95
+  assert.deepEqual([p.lesson, p.speed], ["1", 100]);
+  p = fly(s, 0);         // first clean at 100%
+  assert.equal(p.lesson, "1");
+  p = fly(s, 0);         // second, opposite direction
+  assert.equal(p.lesson, "4");
+});
+
+test("lesson 4: an inverted clean pair below full speed doesn't pass", () => {
+  const s = fresh();
+  s.log.push({ type: "jump", lesson: "4", date: new Date(clock).toISOString() });
+  fly(s, 60);            // inverted CW → 50%, and the collective stays with the trainer
+  fly(s, 0);             // inverted CCW at 50%: hands over the collective, 55%
+  fly(s, 0);             // upright CW
+  fly(s, 0);             // inverted CW, own collective, 55%
+  const p = fly(s, 0);   // inverted CCW, own collective, 60%
+  assert.equal(p.lesson, "4");
+});
+
+test("lesson 5a: a session below full speed resets the run", () => {
+  const s = fresh();
+  s.log.push({ type: "jump", lesson: "5a", date: new Date(clock).toISOString() });
+  for (let i = 0; i < 9; i++) fly(s, 0);
+  s.override = { speed: 90 };
+  fly(s, 0);
+  assert.equal(replay(s.log).piroRun, 0);
+});
+
 test("lesson 4: orientation cycle, 50-crash rule, upright always full speed", () => {
   const s = fresh();
   s.log.push({ type: "jump", lesson: "4", date: new Date(clock).toISOString() });

@@ -23,12 +23,18 @@ export const PIRO_RATE = 6;        // °/s: one rotation per minute
 export const SCHOOL_HEIGHT = 2.0;  // m
 const SPEED_MIN = 20;              // % (the slowest this sim runs)
 
+// House rule, stricter than the guide: a session only counts toward passing a lesson if
+// it was flown at full sim speed. (The guide passes Lesson 1 and 4 on two crash-free
+// sessions at any speed.) Entries without a speed predate the field and count as full.
+export const PASS_SPEED = 100;     // %
+const fullSpeed = (e) => e.speed == null || e.speed === "" || +e.speed >= PASS_SPEED;
+
 // kind: "hover" lessons are flown in the hover trainer with automatic rules;
 //       "practice" lessons are free flight, logged by hand and passed by the pilot.
 export const LESSONS = [
   { id: "1", title: "Slow upright piros", kind: "hover",
     summary: "Hover upright while the heli turns a slow, constant pirouette: one rotation a minute. The trainer flies collective and rudder; you fly the cyclic. Every correction must be made in whatever direction the heli is facing, so you can't cheat.",
-    goal: "Two sessions in a row, one CW and one CCW, with no crashes and the collective under your own control." },
+    goal: "Two sessions in a row, one CW and one CCW, with no crashes, the collective under your own control, at 100% sim speed." },
   { id: "2", title: "Upright lazy 8s", kind: "play",
     summary: "Play-time lesson, started alongside Lesson 1. A lazy 8 is a left-to-right pass and back with a turn at each end, centred toward you. Work it up to a nose-leading 8.",
     goal: "Not logged. Smoother turns at the ends." },
@@ -37,10 +43,10 @@ export const LESSONS = [
     goal: "Not logged. A flip or roll in every direction that stays in the circle: you will need it for Lesson 4." },
   { id: "4", title: "Slow inverted piros", kind: "hover",
     summary: "The same slow pirouette, inverted. Flip or roll to inverted to start; if you wander out of the area, that is a crash. Sessions follow a six-step orientation cycle that mixes in upright piros at full speed.",
-    goal: "Two inverted sessions in a row, one CW and one CCW, with no crashes and your own collective." },
+    goal: "Two inverted sessions in a row, one CW and one CCW, with no crashes and your own collective, at 100% sim speed." },
   { id: "5a", title: "8-point piros", kind: "hover",
     summary: "Now you fly the rudder. Turn in steps, stopping for at least a second at each of the 8 compass points (N, NE, E, …). Ten rotations a session, five each way. Alternate days: one inverted, one upright.",
-    goal: "Ten sessions running without a problem: five upright, five inverted." },
+    goal: "Ten sessions running without a problem at 100% sim speed: five upright, five inverted." },
   { id: "5b", title: "Compass circles", kind: "practice",
     summary: "Hover at each compass point with the nose toward the centre, move into the centre, back out, then on to the next point. Once each CW and CCW, upright and inverted.",
     goal: "All four (CW/CCW, upright/inverted) cleanly." },
@@ -132,7 +138,8 @@ export function replay(log) {
       if (L === "4" && e.crashes > lim.halve) { o.speed = Math.min(o.speed, 50); st.notes.push(`Over ${lim.halve} crashes: next inverted session at 50% speed.`); }
       else if (e.crashes > lim.slower) { o.speed = clampSpeed(o.speed - 10); st.notes.push(`Over ${lim.slower} crashes: speed down to ${o.speed}%.`); }
       else if (e.crashes < lim.faster && o.speed < 100) { o.speed = clampSpeed(o.speed + 5); st.notes.push(`Under ${lim.faster} crashes: speed up to ${o.speed}%.`); }
-      const clean = e.crashes === 0 && !e.collAssist;
+      const clean = e.crashes === 0 && !e.collAssist && fullSpeed(e);
+      if (e.crashes === 0 && !e.collAssist && !clean) st.notes.push(`No crashes, but at ${e.speed}% speed: only sessions at ${PASS_SPEED}% count toward passing.`);
       if (clean && st.clean && st.clean !== e.direction) {
         st.lesson = nextLessonId(L); st.clean = null; st.cycle = 0;
         st.notes.push(`Two clean sessions, CW and CCW: on to Lesson ${st.lesson}!`);
@@ -143,13 +150,13 @@ export function replay(log) {
     if (L === "1") st.nextDir = opposite(e.direction);
     if (L === "4") st.cycle = (st.cycle + 1) % L4_CYCLE.length;
     if (L === "5a") {
-      // clean: no crashes and, when the sim counted them, the ten rotations (five each way)
+      // clean: no crashes, full speed and, when the sim counted them, the ten rotations (five each way)
       const p = e.tally?.piros;
-      const clean = e.crashes === 0 && (!p || (p.cw >= 5 && p.ccw >= 5));
+      const clean = e.crashes === 0 && fullSpeed(e) && (!p || (p.cw >= 5 && p.ccw >= 5));
       st.piroRun = clean ? st.piroRun + 1 : 0;
       st.piroNext = e.orientation === "inverted" ? "upright" : "inverted";
       if (st.piroRun >= 10) { st.lesson = nextLessonId(L); st.piroRun = 0; st.notes.push(`Ten clean sessions in a row: on to Lesson ${st.lesson}!`); }
-      else st.notes.push(clean ? `${st.piroRun} of 10 clean sessions in a row.` : "Run reset: ten clean sessions in a row needed (no crashes, 5 rotations each way).");
+      else st.notes.push(clean ? `${st.piroRun} of 10 clean sessions in a row.` : `Run reset: ten clean sessions in a row needed (no crashes, ${PASS_SPEED}% speed, 5 rotations each way).`);
     }
   }
   return st;
@@ -184,7 +191,7 @@ export function lessonRules(lesson, minutes = BASE_MINUTES) {
   const per = minutes === BASE_MINUTES ? "" : ` (the guide's limits for 15 min, scaled to your ${minutes}-min session)`;
   const speed = `More than ${slower} crash${slower === 1 ? "" : "es"}: next session 10% slower. Fewer than ${faster}: 5% faster, up to 100%. In between: same speed${per}.`;
   const coll = "Your first session with no crashes hands the collective to you for good.";
-  const pass = "Pass: two sessions in a row with no crashes and your own collective, one CW and one CCW.";
+  const pass = `Pass: two sessions in a row with no crashes and your own collective, one CW and one CCW, both at ${PASS_SPEED}% sim speed (a house rule; the guide allows any speed).`;
   switch (lesson.id) {
     case "1": return [
       "The trainer flies collective and rudder (1 rotation a minute); you fly the cyclic. Direction alternates CW / CCW each session.",
@@ -196,7 +203,7 @@ export function lessonRules(lesson, minutes = BASE_MINUTES) {
     case "5a": return [
       "You fly everything, including the rudder. Stop at least 1 s on each of the 8 compass points; the next point lights up green.",
       "Ten rotations a session, five each way. Sessions alternate inverted and upright.",
-      "A clean session: no crashes and the ten rotations counted. Any crash resets the run.",
+      `A clean session: no crashes, ${PASS_SPEED}% sim speed, and the ten rotations counted. Any crash resets the run.`,
       "Pass: ten clean sessions in a row."];
   }
   if (lesson.kind === "play") return ["Play time: not logged and not part of the plan. Fly it after a training session."];
